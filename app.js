@@ -202,8 +202,8 @@ function renderDay(){
     <button class="nav" onclick="moveDate(1)" aria-label="다음날" ${d.date>=d.today?'disabled':''}>▶</button>
   </div>
   ${d.date!==d.today?`<div style="text-align:center;margin:-4px 0 10px"><button class="btn sm ghost" onclick="goToday()">오늘로 가기</button></div>`:''}
-  <div class="row" style="padding:0 4px"><span class="muted">이날 모은 돈</span><span class="amt">${won(d.dayEarned)}</span></div>
-  <button class="btn full ghost" onclick="shareDay()">💬 ${esc(k.name)}에게 오늘 결과 보내기 (카톡 등)</button>`;
+  <div class="row" style="padding:0 4px"><span class="muted">이날 모은 돈</span>
+    <span><span class="amt">${won(d.dayEarned)}</span> <button class="btn sm ghost" style="margin-left:6px" onclick="shareDay()">💬 보내기</button></span></div>`;
   if(daily.length) h+=`<div class="sec">☀️ 매일 실천 <span class="muted">(하루 최대 ${won(dayMax)})</span></div>`+daily.map(itemHtml).join('');
   if(weekly.length) h+=`<div class="sec">📅 이번 주 실천 <span class="muted">(월~일 한 주 동안)</span></div>`+weekly.map(itemHtml).join('');
   if(fineItems.length) h+=`<div class="sec">⚠️ 벌금 <span class="muted">(약속을 지키지 못했을 때)</span></div>`+fineItems.map(itemHtml).join('');
@@ -214,6 +214,11 @@ function renderDay(){
         <span><span class="bonus">+${won(b.amount)}</span> <button class="del" onclick="askDelBonus('${b.id}',${b.amount})">삭제</button></span></div>`).join('')
         :'<div class="muted">할머니·할아버지, 친척, 지인에게 받은 용돈을 여기에 넣어요.</div>'}
       <button class="btn full" style="background:#FFB020" onclick="openBonus()">+ 보너스 넣기</button>
+    </div>
+    <div class="sharecard">
+      <div class="jua" style="font-size:18px">💬 ${d.date===d.today?'오늘':shortDate(d.date)} 결과를 ${esc(k.name)}에게 보내 볼까요?</div>
+      <div class="muted" style="margin-top:4px">한 일, 모은 돈, 잔액을 정리해서 카톡·문자로 보낼 수 있어요. 보내기 전에 내용을 보고 한마디 덧붙일 수 있어요.</div>
+      <button class="btn full" style="background:var(--green)" onclick="shareDay()">${d.date===d.today?'오늘':prettyDate(d.date)} 결과 보내기</button>
     </div>`;
   $('view').innerHTML=h;
 }
@@ -303,19 +308,33 @@ function buildMonthMsg(){
   L.push('한 달 동안 정말 수고했어! 👏');
   return L.join('\n');
 }
-function shareDay(){shareText(buildDayMsg())}
-function shareMonth(){shareText(buildMonthMsg())}
-async function shareText(text){
+function shareDay(){previewShare(buildDayMsg(),'하루 결과 보내기')}
+function shareMonth(){previewShare(buildMonthMsg(),'한 달 통장 보내기')}
+// 보내기 전 미리보기: 내용을 고치거나 한마디 덧붙인 뒤 보내기/복사
+function previewShare(text,title){
+  const canShare=!!navigator.share;
+  openModal(`<h3>💬 ${esc(title)}</h3>
+    <div class="muted">보낼 내용이에요. 고치거나 한마디 덧붙여도 돼요.</div>
+    <textarea id="shareTxt" style="min-height:240px;font-size:14px;margin-top:8px">${esc(text)}</textarea>
+    <div class="chips" style="margin-top:8px">${CHEERS.map((c,i)=>`<button type="button" onclick="addCheer(${i})">${esc(c)}</button>`).join('')}</div>
+    ${canShare?`<button class="btn full" style="background:var(--green)" onclick="sendShare()">카톡·문자로 보내기</button>`:''}
+    <button class="btn full ${canShare?'ghost':''}" onclick="copyShare()">복사하기</button>
+    ${canShare?'':'<div class="muted" style="margin-top:6px">복사한 뒤 카카오톡 등에 붙여 넣어 보내세요.</div>'}
+    <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
+}
+const CHEERS=['사랑해 ❤️','자랑스러워 👍','내일도 화이팅 💪','저금 목표까지 조금만 더! 🎯'];
+function addCheer(i){const t=$('shareTxt');t.value=t.value.replace(/\s*$/,'')+'\n'+CHEERS[i];t.scrollTop=t.scrollHeight}
+async function sendShare(){
+  const text=$('shareTxt').value;
+  try{await navigator.share({text:text});closeModal();toast('보냈어요 💬')}
+  catch(e){if(!(e&&e.name==='AbortError'))toast('보내기를 못 했어요. 복사해서 보내 주세요.')}
+}
+async function shareText(text){ // 가족 코드 보내기 등 바로 보내기
   if(navigator.share){
     try{await navigator.share({text:text});return}
     catch(e){if(e&&e.name==='AbortError')return}
   }
-  // 공유 기능이 없으면: 미리보기 + 복사
-  openModal(`<h3>💬 보낼 내용</h3>
-    <textarea id="shareTxt" style="min-height:260px;font-size:14px">${esc(text)}</textarea>
-    <button class="btn full" onclick="copyShare()">복사하기</button>
-    <div class="muted" style="margin-top:6px">복사한 뒤 카카오톡 등에 붙여 넣어 보내세요.</div>
-    <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
+  previewShare(text,'보낼 내용');
 }
 function copyShare(){
   const t=$('shareTxt');
