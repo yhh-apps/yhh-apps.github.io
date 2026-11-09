@@ -240,7 +240,7 @@ function renderDay(){
     <div class="bcard">
       ${d.bonuses.length?d.bonuses.map(b=>`<div class="row" style="padding:4px 0"><span>🎁 ${esc(b.name)}</span>
         <span><span class="bonus">+${won(b.amount)}</span> <button class="del" onclick="askDelBonus('${b.id}',${b.amount})">삭제</button></span></div>`).join('')
-        :'<div class="muted">할머니·할아버지, 친척, 지인에게 받은 용돈을 여기에 넣어요.</div>'}
+        :'<div class="muted">할머니·할아버지, 친척, 지인에게 받은 용돈을 여기에 넣어요.(현금 실물은 부모님이 보관)</div>'}
       <button class="btn full" style="background:#FFB020" onclick="openBonus()">+ 보너스 넣기</button>
     </div>
     <div class="sharecard">
@@ -563,7 +563,7 @@ function renderManage(){
   const kidName=id=>id==='ALL'?'모두':((S.kids.find(k=>k.id===id)||{}).name||'(삭제된 아이)');
   let h='';
   h+=`<div class="card"><div class="jua" style="font-size:18px">📊 한 달 예상 용돈</div>${est}
-      <div class="muted" style="margin-top:6px">매일 항목 × 30일 + 매주 항목 × 4.3주 기준 · 벌금은 빼고 계산</div></div>`;
+      <div class="muted" style="margin-top:6px">매일 항목 × 30일 + 매주 항목 × 4.3주 기준(벌금 제외)</div></div>`;
   h+=`<div class="card"><div class="row"><div class="jua" style="font-size:18px">✅ 실천 항목</div><button class="btn sm" onclick="editItem()">+ 항목 추가</button></div>`+
     (S.items.length?S.items.map(i=>`<div class="mitem ${i.active?'':'off'}"><div class="t">
       <div><b>${esc(i.name)}</b></div>
