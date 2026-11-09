@@ -6,6 +6,15 @@
 <title>우리집 용돈 통장</title>
 <meta name="description" content="부모가 자녀의 실천 용돈·지출·저축을 기록하는 경제교육 용돈 관리 앱">
 <meta name="theme-color" content="#FF9F43">
+<script>
+  /* 카카오톡 안의 브라우저로 열리면 기록이 카톡 안에만 저장되고 앱 설치도 안 돼서, 크롬(기본 브라우저)으로 다시 열기 */
+  (function(){
+    var ua=navigator.userAgent||'';
+    if(/KAKAOTALK/i.test(ua)){
+      location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(location.href);
+    }
+  })();
+</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -128,6 +137,7 @@
 <body>
 <div class="wrap">
   <h1>💰 우리집 용돈 통장</h1>
+  <div class="demobar hide" id="inappBar" style="background:#FFF0F0;color:#B23A48">⚠️ 앱 안의 브라우저로 열려 있어요. 오른쪽 위 메뉴에서 「다른 브라우저로 열기」(크롬)를 눌러 주세요. 그래야 기록이 안전하게 저장되고 앱을 설치할 수 있어요.</div>
   <div class="demobar hide" id="demoBar">👀 예시 자료로 둘러보는 중이에요. 마음껏 눌러 보세요!
     <button class="btn sm" onclick="askEndDemo()">내 아이로 시작하기</button></div>
   <div class="kids" id="kids"></div>

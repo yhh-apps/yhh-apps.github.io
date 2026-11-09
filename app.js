@@ -29,9 +29,37 @@ function showErr(e){$('view').innerHTML='<div class="card warn">'+esc(errMsg(e))
 /* ---------- 시작 ---------- */
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 
+/* 카톡 외 다른 앱 안의 브라우저(네이버·인스타·페북·라인 등)로 열렸으면 안내 */
+if(/NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|KAKAOTALK|DaumApps|everytimeApp|; wv\)/i.test(navigator.userAgent)) $('inappBar').classList.remove('hide');
+
+/* 가족 초대 링크: ?join=가족코드 로 열면 코드를 자동으로 넣어 줌 */
+let INVITE=null;
+try{
+  const q=new URLSearchParams(location.search), j=(q.get('join')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(j.length===8) INVITE=j;
+  if(q.has('join')) history.replaceState(null,'',location.pathname);
+}catch(e){}
+function applyInvite(){
+  if(!INVITE||!Sync.available()) return;
+  const c=INVITE; INVITE=null; const shown=Sync.shareCode(c);
+  if(!S.kids.length&&$('joinCode')){ // 첫 화면
+    $('joinCode').value=shown; $('joinCode').scrollIntoView({block:'center'});
+    toast('가족 코드가 입력됐어요. 「가족 코드로 참여하기」를 눌러 주세요');
+    return;
+  }
+  if(S.family===c){toast('이미 이 가족과 연결되어 있어요');return}
+  if(S.family){
+    openModal(`<h3>다른 가족 초대예요</h3><div>이 휴대폰은 이미 다른 가족(${esc(Sync.shareCode(S.family))})과 연결되어 있어요.</div>
+      <div class="muted" style="margin-top:6px">새 가족(${esc(shown)})에 참여하려면 「설정 → 이 휴대폰 연결 끊기」를 한 뒤 코드를 입력해 주세요.</div>
+      <button class="btn full" onclick="closeModal()">확인</button>`);
+    return;
+  }
+  askJoinFamily(); $('joinCode').value=shown;
+}
+
 call('getInitData').then(d=>{
   applyInit(d);
-  if(!d.ready) return renderSetup();
+  if(!d.ready){ renderSetup(); applyInvite(); return; }
   if(d.family) Sync.resume();
   if(d.hasPin){S.locked=true;return renderLock();}
   startMain();
@@ -76,6 +104,7 @@ function startMain(){
   $('tabs').classList.remove('hide');
   $('demoBar').classList.toggle('hide',!S.demo);
   renderKids(); render();
+  applyInvite();
 }
 
 /* ---------- 처음 시작 ---------- */
@@ -202,8 +231,7 @@ function renderDay(){
     <button class="nav" onclick="moveDate(1)" aria-label="다음날" ${d.date>=d.today?'disabled':''}>▶</button>
   </div>
   ${d.date!==d.today?`<div style="text-align:center;margin:-4px 0 10px"><button class="btn sm ghost" onclick="goToday()">오늘로 가기</button></div>`:''}
-  <div class="row" style="padding:0 4px"><span class="muted">이날 모은 돈</span>
-    <span><span class="amt">${won(d.dayEarned)}</span> <button class="btn sm ghost" style="margin-left:6px" onclick="shareDay()">💬 보내기</button></span></div>`;
+  <div class="row" style="padding:0 4px"><span class="muted">이날 모은 돈</span><span class="amt">${won(d.dayEarned)}</span></div>`;
   if(daily.length) h+=`<div class="sec">☀️ 매일 실천 <span class="muted">(하루 최대 ${won(dayMax)})</span></div>`+daily.map(itemHtml).join('');
   if(weekly.length) h+=`<div class="sec">📅 이번 주 실천 <span class="muted">(월~일 한 주 동안)</span></div>`+weekly.map(itemHtml).join('');
   if(fineItems.length) h+=`<div class="sec">⚠️ 벌금 <span class="muted">(약속을 지키지 못했을 때)</span></div>`+fineItems.map(itemHtml).join('');
@@ -311,12 +339,12 @@ function buildMonthMsg(){
 function shareDay(){previewShare(buildDayMsg(),'하루 결과 보내기')}
 function shareMonth(){previewShare(buildMonthMsg(),'한 달 통장 보내기')}
 // 보내기 전 미리보기: 내용을 고치거나 한마디 덧붙인 뒤 보내기/복사
-function previewShare(text,title){
+function previewShare(text,title,noCheer){
   const canShare=!!navigator.share;
   openModal(`<h3>💬 ${esc(title)}</h3>
     <div class="muted">보낼 내용이에요. 고치거나 한마디 덧붙여도 돼요.</div>
     <textarea id="shareTxt" style="min-height:240px;font-size:14px;margin-top:8px">${esc(text)}</textarea>
-    <div class="chips" style="margin-top:8px">${CHEERS.map((c,i)=>`<button type="button" onclick="addCheer(${i})">${esc(c)}</button>`).join('')}</div>
+    <div class="chips ${noCheer?'hide':''}" style="margin-top:8px">${CHEERS.map((c,i)=>`<button type="button" onclick="addCheer(${i})">${esc(c)}</button>`).join('')}</div>
     ${canShare?`<button class="btn full" style="background:var(--green)" onclick="sendShare()">카톡·문자로 보내기</button>`:''}
     <button class="btn full ${canShare?'ghost':''}" onclick="copyShare()">복사하기</button>
     ${canShare?'':'<div class="muted" style="margin-top:6px">복사한 뒤 카카오톡 등에 붙여 넣어 보내세요.</div>'}
@@ -487,7 +515,13 @@ function renderLedger(L){
     }
     return `<div class="line"><div class="l">${left}</div><div class="r">${amt}<div class="muted">잔액 ${won(l.balance)}</div></div></div>`;
   }).join('');
-  h+=`</div><button class="btn full ghost" onclick="shareMonth()">💬 ${esc(k.name)}에게 ${Number(L.month.slice(5))}월 통장 보내기</button>
+  const mm=Number(L.month.slice(5));
+  h+=`</div>
+    <div class="sharecard">
+      <div class="jua" style="font-size:18px">💬 ${mm}월 통장을 ${esc(k.name)}에게 보내 볼까요?</div>
+      <div class="muted" style="margin-top:4px">번 돈, 쓴 돈, 저축, 많이 실천한 것을 정리해서 카톡·문자로 보낼 수 있어요. 보내기 전에 내용을 보고 한마디 덧붙일 수 있어요.</div>
+      <button class="btn full" style="background:var(--green)" onclick="shareMonth()">${mm}월 통장 보내기</button>
+    </div>
     <div class="tip">💡 아이와 통장 보며 이야기 나누기: "이번 달 산 것 중 꼭 필요했던 건 뭐였니?", "얼마를 진짜 통장에 저축해 둘까?"</div>`;
   $('view').innerHTML=h;
 }
@@ -626,7 +660,7 @@ function familyCardHtml(){
   return h+`<div class="muted" style="margin-top:4px">이 코드를 다른 부모님 휴대폰의 앱에 입력하면 함께 쓸 수 있어요.</div>
     <div class="code">${esc(Sync.shareCode(S.family))}</div>
     <div class="muted" id="syncStatus">${statusHtml()}</div>
-    <button class="btn full" onclick="shareFamilyCode()">💬 코드 보내기 (카톡 등)</button>
+    <button class="btn full" style="background:var(--green)" onclick="shareFamilyCode()">💬 가족 초대 보내기 (앱 설치 링크 포함)</button>
     <button class="btn full ghost" onclick="askLeaveFamily()">이 휴대폰 연결 끊기</button>
     <button class="btn full ghost" style="color:var(--red)" onclick="askDestroyFamily()">가족 데이터 서버에서 모두 삭제</button></div>`;
 }
@@ -639,7 +673,8 @@ function askCreateFamily(){
 }
 function doCreateFamily(){
   $('cfBtn').disabled=true; $('cfBtn').textContent='만드는 중…';
-  Sync.create().then(code=>{S.family=code.replace('-','');closeModal();renderManage();toast('가족을 만들었어요! 코드: '+code)})
+  Sync.create().then(code=>{S.family=code.replace('-','');closeModal();renderManage();toast('가족을 만들었어요! 이제 초대를 보내 보세요');
+      setTimeout(shareFamilyCode,600)})
     .catch(e=>{$('cfBtn').disabled=false;$('cfBtn').textContent='가족 만들기';toast(errMsg(e))});
 }
 function askJoinFamily(){
@@ -660,9 +695,23 @@ function doJoin(){
     startMain(); toast('가족과 연결됐어요! 👨‍👩‍👧');
   }).catch(e=>{btn.disabled=false;btn.textContent='다시 시도';toast(errMsg(e))});
 }
-function shareFamilyCode(){
-  shareText(`[우리집 용돈 통장] 가족 코드: ${Sync.shareCode(S.family)}\n앱 처음 화면이나 「설정 → 가족과 함께 쓰기」에서 이 코드를 입력하면 우리 아이 통장을 함께 쓸 수 있어요.`);
+function appUrl(){return location.origin+location.pathname.replace(/[^/]*$/,'')}
+function inviteMsg(){
+  const code=Sync.shareCode(S.family);
+  return `[우리집 용돈 통장] 가족 초대 👨‍👩‍👧
+우리 아이 용돈 통장을 함께 써요!
+
+① 아래 링크를 눌러 앱을 열어 주세요
+${appUrl()}?join=${S.family}
+
+② 크롬 메뉴(⋮) → 「앱 설치」(또는 「홈 화면에 추가」)를 누르면 휴대폰에 앱이 생겨요
+
+③ 첫 화면에 가족 코드가 자동으로 들어가 있어요 → 「가족 코드로 참여하기」
+
+가족 코드: ${code}
+(자동으로 안 들어가면 직접 입력해 주세요)`;
 }
+function shareFamilyCode(){previewShare(inviteMsg(),'가족 초대 보내기',true)}
 function askLeaveFamily(){
   openModal(`<h3>이 휴대폰 연결 끊기</h3>
     <div>이 휴대폰만 가족에서 빠져요. 다른 휴대폰과 서버의 기록은 그대로예요.</div>
