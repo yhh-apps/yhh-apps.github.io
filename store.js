@@ -15,8 +15,12 @@
   const METHODS = ['카드', '현금'];
   const TRANSFER = '통장 이체';
   const BONUS = 'BONUS';
+  const INTEREST = 'INTEREST'; // 엄마·아빠 은행 이자 (기록의 항목ID)
+  const CHEER = 'CHEER';       // 응원 메시지 (금액 0)
+  const JARS = ['spend', 'save', 'give']; // 세 개의 통장: 쓰기·저축·나눔
+  function special_(r) { return r.itemId === BONUS || r.itemId === INTEREST || r.itemId === CHEER; }
 
-  let D = null;          // 메모리에 올린 전체 데이터
+  let D = null;         // 메모리에 올린 전체 데이터
   let idb = null;
   let fallback = false;  // IndexedDB를 못 쓰면 localStorage 사용
 
@@ -101,6 +105,65 @@
       (item.period === '매일' ? r.date === dateStr : weekStart_(r.date) === wk);
   }
   function hasKid_(id) { return D.kids.some(k => k.id === id); }
+  function kidObj_(id) { return D.kids.find(k => k.id === id) || { id: id }; }
+  function nextMonth_(m) { const p = m.split('-').map(Number); const d = new Date(Date.UTC(p[0], p[1], 1)); return d.toISOString().slice(0, 7); }
+  function monthEnd_(m) { return addDays_(nextMonth_(m) + '-01', -1); }
+
+  /* ===================== 플러스 (출시 기념 무료 체험 → 유료) ===================== */
+
+  /** 플러스 상태: 체험 기간 중이거나 구매했으면 사용 가능 */
+  function plus_() {
+    const cfg = window.PLUS_CONFIG || {};
+    const promoEnd = cfg.promoEnd || null;               // 'yyyy-mm-dd' (없으면 출시 전이라 계속 체험)
+    const promo = !promoEnd || today_() <= promoEnd;
+    const purchased = !!(D && D.settings.plusPurchased);
+    return { active: promo || purchased, promo: promo, promoEnd: promoEnd, purchased: purchased, price: cfg.price || '' };
+  }
+  function needPlus_() { if (!plus_().active) throw new Error('플러스 기능이에요. 설정 → 용돈 받아라 플러스에서 시작해 주세요.'); }
+
+  /** 세 개의 통장 잔액 — 들어온 돈(실천·보너스)을 비율대로 나누고, 이자는 저축 통장, 쓴 돈은 고른 통장에서 뺌 */
+  function jarOf_(s) { return JARS.indexOf(s.jar) >= 0 ? s.jar : (s.method === TRANSFER ? 'save' : 'spend'); }
+  function jars_(kid, recs, spends) {
+    const j = kid.jars;
+    if (!j || !j.on) return null;
+    const income = recs.filter(r => r.amount > 0 && r.itemId !== INTEREST && r.itemId !== CHEER).reduce((s, r) => s + r.amount, 0);
+    const interest = sum_(recs.filter(r => r.itemId === INTEREST));
+    const out = jar => sum_(spends.filter(s => jarOf_(s) === jar));
+    const total = sum_(recs) - sum_(spends);
+    const save = Math.floor(income * j.save / 100) + interest - out('save');
+    const give = Math.floor(income * j.give / 100) - out('give');
+    return { spend: total - save - give, save: save, give: give, ratio: { spend: j.spend, save: j.save, give: j.give } };
+  }
+  /** 이자 계산 기준 금액: 그달 말 잔액 (세 개의 통장을 쓰면 저축 통장 잔액) */
+  function interestBase_(kid, endDate) {
+    const recs = D.records.filter(r => r.kidId === kid.id && r.date <= endDate);
+    const spends = D.spends.filter(s => s.kidId === kid.id && s.date <= endDate);
+    const jars = jars_(kid, recs, spends);
+    return jars ? jars.save : sum_(recs) - sum_(spends);
+  }
+
+  /** 지난달까지의 이자를 붙임 (매달 1일에 지난달 말 잔액 × 이자율). 같은 달은 한 번만 — ID가 정해져 있어 두 휴대폰에서 계산해도 겹치지 않음 */
+  function accrueInterest() {
+    need_();
+    if (!plus_().active || D.demo) return 0;
+    const cur = today_().slice(0, 7);
+    let added = 0;
+    D.kids.forEach(kid => {
+      const rate = num_(kid.interestRate);
+      if (!(rate > 0) || !kid.interestFrom) return;
+      for (let m = kid.interestFrom; m < cur; m = nextMonth_(m)) {
+        const id = 'int_' + kid.id + '_' + m;
+        if (D.records.some(r => r.id === id)) continue;
+        const base = interestBase_(kid, monthEnd_(m));
+        const amount = Math.floor(base * rate / 100);
+        if (amount <= 0) continue;
+        const date = nextMonth_(m) + '-01';
+        D.records.push({ id: id, date: date, kidId: kid.id, itemId: INTEREST, itemName: Number(m.slice(5)) + '월 이자 (' + rate + '%)', amount: amount, ts: date + ' 00:00:00' });
+        added++;
+      }
+    });
+    return added;
+  }
   function checkPin_(pin) {
     if (D.settings.pin && str_(pin) !== D.settings.pin) throw new Error('비밀번호가 맞지 않아요.');
   }
@@ -188,8 +251,18 @@
     spend(4, k1, '아이스크림', 1500, KINDS[1], '현금', '친구랑');
     spend(15, k2, '머리끈', 1500, KINDS[0], '카드', '');
     spend(9, k2, '스티커', 2000, KINDS[1], '현금', '');
-    D.spends.push({ id: newId_('t'), date: addDays_(today, -7), kidId: k1.id, name: '실물 통장으로 이체', amount: 10000, kind: '', memo: '어린이 저축통장', ts: addDays_(today, -7) + ' 19:00:00', method: TRANSFER });
+    D.spends.push({ id: newId_('t'), date: addDays_(today, -7), kidId: k1.id, name: '실물 통장으로 이체', amount: 5000, kind: '', memo: '어린이 저축통장', ts: addDays_(today, -7) + ' 19:00:00', method: TRANSFER });
     D.spends.push({ id: newId_('t'), date: addDays_(today, -7), kidId: k2.id, name: '실물 통장으로 이체', amount: 5000, kind: '', memo: '어린이 저축통장', ts: addDays_(today, -7) + ' 19:00:00', method: TRANSFER });
+    // 플러스 맛보기: 하준은 세 개의 통장 + 이자 2%, 할머니 응원
+    k1.jars = { on: true, spend: 60, save: 30, give: 10 };
+    k1.interestRate = 2; k1.interestFrom = addDays_(today, -27).slice(0, 7);
+    const lastM = addDays_(today.slice(0, 7) + '-01', -1).slice(0, 7);
+    if (lastM >= k1.interestFrom) {
+      const base = interestBase_(k1, monthEnd_(lastM)), amt = Math.floor(base * 2 / 100);
+      if (amt > 0) D.records.push({ id: 'int_' + k1.id + '_' + lastM, date: today.slice(0, 7) + '-01', kidId: k1.id, itemId: INTEREST, itemName: Number(lastM.slice(5)) + '월 이자 (2%)', amount: amt, ts: today.slice(0, 7) + '-01 00:00:00' });
+    }
+    D.spends.push({ id: newId_('s'), date: addDays_(today, -3), kidId: k1.id, name: '친구 생일 선물', amount: 2000, kind: KINDS[0], memo: '나눔 통장에서', ts: addDays_(today, -3) + ' 17:00:00', method: '현금', jar: 'give' });
+    D.records.push({ id: newId_('c'), date: addDays_(today, -1), kidId: k1.id, itemId: CHEER, itemName: '할머니 · 책 읽기 꾸준히 하는 우리 하준이 최고!', amount: 0, ts: addDays_(today, -1) + ' 21:00:00' });
     return getInitData();
   }
 
@@ -205,7 +278,10 @@
       items: D ? items_() : [],
       kinds: KINDS,
       methods: METHODS,
-      hasPin: !!(D && D.settings.pin)
+      hasPin: !!(D && D.settings.pin),
+      plus: plus_(),
+      role: D && D.settings.role === 'gp' ? 'gp' : 'parent', // 이 휴대폰의 역할 (조부모 모드는 기기마다)
+      gpName: D ? str_(D.settings.gpName) : ''
     };
   }
 
@@ -227,13 +303,17 @@
       date: dateStr, today: today_(), items: list,
       bonuses: recs.filter(r => r.itemId === BONUS && r.date === dateStr)
         .map(r => ({ id: r.id, name: r.itemName, amount: r.amount })),
+      cheers: recs.filter(r => r.itemId === CHEER && r.date === dateStr).map(r => ({ id: r.id, name: r.itemName })),
+      interests: recs.filter(r => r.itemId === INTEREST && r.date === dateStr).map(r => ({ name: r.itemName, amount: r.amount })),
       daySpends: spends.filter(s => s.date === dateStr)
-        .map(s => ({ name: s.name, amount: s.amount, method: s.method, kind: s.kind })),
+        .map(s => ({ name: s.name, amount: s.amount, method: s.method, kind: s.kind, jar: jarOf_(s) })),
       dayCounts: (() => { // 이 날짜에 체크한 횟수 (매주 항목도 이 날 체크한 것만)
         const o = {};
-        recs.filter(r => r.date === dateStr && r.itemId !== BONUS).forEach(r => { o[r.itemId] = (o[r.itemId] || 0) + 1; });
+        recs.filter(r => r.date === dateStr && !special_(r)).forEach(r => { o[r.itemId] = (o[r.itemId] || 0) + 1; });
         return o;
       })(),
+      jars: plus_().active ? jars_(kidObj_(kidId), recs, spends) : null,
+      interestRate: plus_().active ? num_((kidObj_(kidId) || {}).interestRate) : 0,
       balance: earned - out, totalEarned: earned,
       monthEarned: sum_(recs.filter(r => r.date.slice(0, 7) === month)),
       monthSpent: sum_(realSpends.filter(s => s.date.slice(0, 7) === month)),
@@ -274,7 +354,9 @@
     if (!hasKid_(kidId)) throw new Error('아이를 확인해 주세요.');
     const kind = KINDS.indexOf(sp.kind) >= 0 ? sp.kind : '';
     const method = METHODS.indexOf(sp.method) >= 0 ? sp.method : '카드';
-    D.spends.push({ id: newId_('s'), date: date, kidId: kidId, name: name, amount: amount, kind: kind, memo: str_(sp.memo), ts: now_(), method: method });
+    const row = { id: newId_('s'), date: date, kidId: kidId, name: name, amount: amount, kind: kind, memo: str_(sp.memo), ts: now_(), method: method };
+    if (JARS.indexOf(sp.jar) >= 0 && sp.jar !== 'spend') row.jar = sp.jar; // 저축·나눔 통장에서 쓴 경우
+    D.spends.push(row);
     return getDay(kidId, viewDate);
   }
 
@@ -294,8 +376,74 @@
 
   function deleteBonus(id, kidId, viewDate) {
     need_();
-    D.records = D.records.filter(r => !(r.id === id && r.itemId === BONUS));
+    D.records = D.records.filter(r => !(r.id === id && (r.itemId === BONUS || r.itemId === CHEER)));
     return kidId ? getDay(kidId, viewDate) : true;
+  }
+
+  /** 응원 메시지 (조부모·가족) — 금액이 있으면 보너스로, 없으면 메시지만 */
+  function addCheer(kidId, c, viewDate) {
+    need_();
+    const from = str_(c.from), msg = str_(c.msg).slice(0, 200);
+    const amount = Math.max(0, Math.floor(num_(c.amount)));
+    if (!from) throw new Error('보내는 사람을 입력해 주세요.');
+    if (!msg && !amount) throw new Error('응원 메시지를 써 주세요.');
+    if (!hasKid_(kidId)) throw new Error('아이를 확인해 주세요.');
+    const date = today_();
+    const name = from + (msg ? ' · ' + msg : '');
+    if (amount > 0) D.records.push({ id: newId_('b'), date: date, kidId: kidId, itemId: BONUS, itemName: name, amount: amount, ts: now_() });
+    else D.records.push({ id: newId_('c'), date: date, kidId: kidId, itemId: CHEER, itemName: name, amount: 0, ts: now_() });
+    return getDay(kidId, viewDate || date);
+  }
+
+  /** 이 휴대폰의 역할 — 'gp'(조부모: 보기·응원만) 또는 'parent' */
+  function setRole(role, gpName) {
+    need_();
+    D.settings.role = role === 'gp' ? 'gp' : 'parent';
+    D.settings.gpName = str_(gpName).slice(0, 10);
+    return getInitData();
+  }
+
+  /** 용돈 계약서 — 서명은 이 휴대폰에만 저장 (그림이라 동기화하지 않음) */
+  function getContract(kidId) {
+    need_(); needPlus_();
+    return (D.contracts || {})[kidId] || null;
+  }
+  function saveContract(kidId, c) {
+    need_(); needPlus_();
+    D.contracts = D.contracts || {};
+    D.contracts[kidId] = { date: today_(), special: str_(c.special).slice(0, 500), payday: str_(c.payday).slice(0, 40),
+      childSign: String(c.childSign || '').slice(0, 300000), parentSign: String(c.parentSign || '').slice(0, 300000) };
+    return D.contracts[kidId];
+  }
+
+  /** 성장 앨범 — 기간(from~to) 동안의 기록 요약 */
+  function getAlbum(kidId, from, to) {
+    need_(); needPlus_();
+    const k = kidObj_(kidId);
+    const recs = D.records.filter(r => r.kidId === kidId && r.date >= from && r.date <= to);
+    const spends = D.spends.filter(s => s.kidId === kidId && s.date >= from && s.date <= to);
+    const work = recs.filter(r => !special_(r) && r.amount >= 0);
+    const fines = recs.filter(r => !special_(r) && r.amount < 0);
+    const byItem = {};
+    work.forEach(r => { byItem[r.itemName] = (byItem[r.itemName] || 0) + 1; });
+    const days = Array.from(new Set(work.map(r => r.date))).sort();
+    let best = 0, run = 0, prev = null;
+    days.forEach(d => { run = prev && addDays_(prev, 1) === d ? run + 1 : 1; best = Math.max(best, run); prev = d; });
+    const allRecs = D.records.filter(r => r.kidId === kidId), allSp = D.spends.filter(s => s.kidId === kidId);
+    const balance = sum_(allRecs) - sum_(allSp);
+    return {
+      kid: { name: k.name, emoji: k.emoji, goalName: k.goalName, goalAmount: k.goalAmount },
+      from: from, to: to,
+      checks: work.length, activeDays: days.length, bestStreak: best,
+      top: Object.keys(byItem).map(n => ({ name: n, count: byItem[n] })).sort((a, b) => b.count - a.count).slice(0, 3),
+      earned: sum_(work), bonus: sum_(recs.filter(r => r.itemId === BONUS)), interest: sum_(recs.filter(r => r.itemId === INTEREST)),
+      fineCount: fines.length, fineSum: -sum_(fines),
+      spent: sum_(spends.filter(s => s.method !== TRANSFER && jarOf_(s) !== 'give')),
+      gave: sum_(spends.filter(s => jarOf_(s) === 'give')),
+      saved: sum_(spends.filter(s => s.method === TRANSFER)),
+      cheers: recs.filter(r => r.itemId === CHEER || (r.itemId === BONUS && /·/.test(r.itemName))).length,
+      balance: balance, goalDone: !!(k.goalAmount && balance >= k.goalAmount)
+    };
   }
 
   function addTransfer(kidId, t) {
@@ -306,7 +454,9 @@
     if (date > today_()) throw new Error('미래 날짜로는 기록할 수 없어요.');
     const bal = balanceOf_(kidId);
     if (amount > bal) throw new Error('잔액(' + bal.toLocaleString() + '원)보다 많이 이체할 수 없어요.');
-    D.spends.push({ id: newId_('t'), date: date, kidId: kidId, name: '실물 통장으로 이체', amount: amount, kind: '', memo: str_(t.memo), ts: now_(), method: TRANSFER });
+    const jars = plus_().active ? jars_(kidObj_(kidId), D.records.filter(r => r.kidId === kidId), D.spends.filter(s => s.kidId === kidId)) : null;
+    if (jars && amount > jars.save) throw new Error('저축 통장(' + Math.max(0, jars.save).toLocaleString() + '원)보다 많이 이체할 수 없어요.');
+    D.spends.push({ id: newId_('t'), date: date, kidId: kidId, name: '실물 통장으로 이체', amount: amount, kind: '', memo: str_(t.memo), ts: now_(), method: TRANSFER, jar: 'save' });
     return true;
   }
 
@@ -320,8 +470,8 @@
     need_();
     const recs = D.records.filter(r => r.kidId === kidId);
     const spends = D.spends.filter(s => s.kidId === kidId);
-    const work = recs.filter(r => r.itemId !== BONUS && r.amount >= 0);
-    const fines = recs.filter(r => r.itemId !== BONUS && r.amount < 0);
+    const work = recs.filter(r => !special_(r) && r.amount >= 0);
+    const fines = recs.filter(r => !special_(r) && r.amount < 0);
     const byDate = {};
     work.concat(fines).forEach(r => {
       const key = r.date + (r.amount < 0 ? '-' : '+');
@@ -336,16 +486,17 @@
         date: d.date, type: d.fine ? 'fine' : 'in', amount: d.amount, count: d.count, ord: d.fine ? 3 : 0,
         detail: Object.keys(d.map).map(n => d.map[n] > 1 ? n + '×' + d.map[n] : n).join(', ')
       };
-    }).concat(recs.filter(r => r.itemId === BONUS).map(r => ({
-      id: r.id, date: r.date, type: 'bonus', amount: r.amount, name: r.itemName, ord: 1
+    }).concat(recs.filter(r => r.itemId === BONUS || r.itemId === INTEREST || r.itemId === CHEER).map(r => ({
+      id: r.id, date: r.date, type: r.itemId === BONUS ? 'bonus' : r.itemId === INTEREST ? 'interest' : 'cheer',
+      amount: r.amount, name: r.itemName, ord: r.itemId === INTEREST ? -1 : 1
     }))).concat(spends.map(s => ({
       id: s.id, date: s.date, type: s.method === TRANSFER ? 'save' : 'out', amount: s.amount,
-      name: s.name, kind: s.kind, method: s.method, memo: s.memo, ts: s.ts, ord: 2
+      name: s.name, kind: s.kind, method: s.method, memo: s.memo, ts: s.ts, ord: 2, jar: jarOf_(s)
     })));
     lines.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 :
       a.ord !== b.ord ? a.ord - b.ord : String(a.ts || '').localeCompare(String(b.ts || '')));
     let bal = 0;
-    lines.forEach(l => { bal += (l.type === 'in' || l.type === 'bonus') ? l.amount : -l.amount; l.balance = bal; });
+    lines.forEach(l => { bal += (l.type === 'in' || l.type === 'bonus' || l.type === 'interest') ? l.amount : l.type === 'cheer' ? 0 : -l.amount; l.balance = bal; });
 
     const inMonth = lines.filter(l => l.date.slice(0, 7) === month);
     const sumType = t => inMonth.filter(l => l.type === t).reduce((s, l) => s + l.amount, 0);
@@ -363,7 +514,9 @@
       month: month,
       lines: inMonth.reverse(),
       monthIn: sumType('in'), monthBonus: sumType('bonus'),
-      monthOut: sumType('out'), monthSaved: sumType('save'), monthFine: sumType('fine'),
+      monthOut: sumType('out'), monthSaved: sumType('save'), monthFine: sumType('fine'), monthInterest: sumType('interest'),
+      jars: plus_().active ? jars_(kidObj_(kidId), recs, spends) : null,
+      interestRate: plus_().active ? num_(kidObj_(kidId).interestRate) : 0,
       totalSaved: spends.filter(s => s.method === TRANSFER).reduce((s, x) => s + x.amount, 0),
       kindSum: kindSum, methodSum: methodSum,
       balance: bal,
@@ -420,6 +573,21 @@
     const goalAmount = Math.max(0, Math.floor(num_(k.goalAmount)));
     const cur = k.id ? D.kids.find(x => x.id === k.id) : null;
     const v = { name: name, desc: str_(k.desc), emoji: str_(k.emoji) || '🙂', goalName: str_(k.goalName), goalAmount: goalAmount };
+    // 플러스: 엄마·아빠 은행 이자, 세 개의 통장
+    if (k.interestRate !== undefined || k.jars !== undefined) {
+      const rate = Math.max(0, Math.min(10, Math.round(num_(k.interestRate) * 10) / 10));
+      const j = k.jars || {};
+      const jarsOn = !!j.on;
+      if ((rate > 0 || jarsOn) && !plus_().active) needPlus_();
+      v.interestRate = rate;
+      if (rate > 0 && !(cur && num_(cur.interestRate) > 0 && cur.interestFrom)) v.interestFrom = today_().slice(0, 7);
+      if (rate === 0) v.interestFrom = ''; // 껐다가 다시 켜면 그달부터 새로 시작
+      if (jarsOn) {
+        const s = Math.floor(num_(j.spend)), sv = Math.floor(num_(j.save)), g = Math.floor(num_(j.give));
+        if (s < 0 || sv < 0 || g < 0 || s + sv + g !== 100) throw new Error('세 개의 통장 비율을 합쳐서 100%가 되게 해 주세요.');
+        v.jars = { on: true, spend: s, save: sv, give: g };
+      } else v.jars = cur && cur.jars ? Object.assign({}, cur.jars, { on: false }) : null;
+    }
     if (cur) Object.assign(cur, v);
     else {
       const order = D.kids.reduce((m, x) => Math.max(m, x.order), 0) + 1;
@@ -518,10 +686,11 @@
   /* ===================== 호출 창구 ===================== */
 
   const API = {
+    accrueInterest, addCheer, setRole, getContract, saveContract, getAlbum,
     getInitData, setupApp, loadDemo, getDay, setCount, addSpend, addBonus, deleteBonus, addTransfer, deleteSpend,
     getLedger, verifyPin, setPin, saveItem, deleteItem, saveKid, deleteKid, exportData, importData, resetAll
   };
-  const READ_ONLY = { getInitData: 1, getDay: 1, getLedger: 1, verifyPin: 1, exportData: 1 };
+  const READ_ONLY = { getInitData: 1, getDay: 1, getLedger: 1, verifyPin: 1, exportData: 1, getContract: 1, getAlbum: 1 };
 
   let queue = Promise.resolve();
   function enqueue_(job) {

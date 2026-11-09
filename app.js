@@ -33,15 +33,16 @@ document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>setTab(b.dataset.tab)
 if(/NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|KAKAOTALK|DaumApps|everytimeApp|; wv\)/i.test(navigator.userAgent)) $('inappBar').classList.remove('hide');
 
 /* 가족 초대 링크: ?join=가족코드 로 열면 코드를 자동으로 넣어 줌 */
-let INVITE=null;
+let INVITE=null, INVITE_GP=false;
 try{
   const q=new URLSearchParams(location.search), j=(q.get('join')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-  if(j.length===8) INVITE=j;
+  if(j.length===8){ INVITE=j; INVITE_GP=q.get('gp')==='1'; }
   if(q.has('join')) history.replaceState(null,'',location.pathname);
 }catch(e){}
 function applyInvite(){
   if(!INVITE||!Sync.available()) return;
   const c=INVITE; INVITE=null; const shown=Sync.shareCode(c);
+  if(!S.kids.length&&INVITE_GP){ renderGpSetup(c); return; } // 조부모 초대
   if(!S.kids.length&&$('joinCode')){ // 첫 화면
     $('joinCode').value=shown; $('joinCode').scrollIntoView({block:'center'});
     toast('가족 코드가 입력됐어요. 「가족 코드로 참여하기」를 눌러 주세요');
@@ -57,13 +58,17 @@ function applyInvite(){
   askJoinFamily(); $('joinCode').value=shown;
 }
 
-call('getInitData').then(d=>{
-  applyInit(d);
-  if(!d.ready){ renderSetup(); applyInvite(); return; }
-  if(d.family) Sync.resume();
-  if(d.hasPin){S.locked=true;return renderLock();}
-  startMain();
-}).catch(showErr);
+// 모든 스크립트(plus.js 등)를 다 불러온 뒤에 시작
+function boot(){
+  call('getInitData').then(d=>{
+    applyInit(d);
+    if(!d.ready){ renderSetup(); applyInvite(); return; }
+    if(d.family) Sync.resume();
+    if(d.hasPin){S.locked=true;return renderLock();}
+    startMain();
+  }).catch(showErr);
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
 
 /* ---------- 가족 동기화 연결 ---------- */
 let remoteT=null, pendingRefresh=false;
@@ -92,6 +97,7 @@ function statusHtml(){
 
 function applyInit(d){
   S.kids=d.kids;S.items=d.items;S.kinds=d.kinds;S.methods=d.methods;S.hasPin=d.hasPin;S.demo=!!d.demo;S.family=d.family||null;
+  S.plus=d.plus||{active:false};S.role=d.role||'parent';S.gpName=d.gpName||'';
   S.today=d.today;
   $('demoBar').classList.toggle('hide',!S.demo);
   if(!S.kids.some(k=>k.id===S.kidId)) S.kidId=S.kids[0]&&S.kids[0].id;
@@ -105,7 +111,14 @@ function startMain(){
   $('demoBar').classList.toggle('hide',!S.demo);
   renderKids(); render();
   applyInvite();
+  runAccrue();
 }
+// 엄마·아빠 은행: 지난달까지의 이자 붙이기 (부모 휴대폰에서만)
+function runAccrue(){
+  if(S.role==='gp'||!S.plus.active) return;
+  call('accrueInterest').then(n=>{ if(n){ toast('🏦 엄마·아빠 은행 이자가 들어왔어요!'); render(); } }).catch(()=>{});
+}
+function isGp(){return S.role==='gp'}
 
 /* ---------- 처음 시작 ---------- */
 function renderSetup(){
@@ -179,7 +192,7 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden){hiddenAt=Date.now();return}
   if(S.hasPin&&!S.locked&&hiddenAt&&Date.now()-hiddenAt>LOCK_AFTER_MS){S.locked=true;renderLock()}
   else if(!S.locked&&S.kids.length){ // 날짜가 바뀌었으면 오늘로
-    call('getInitData').then(d=>{ if(d.today!==S.today){const wasToday=S.date===S.today;S.today=d.today;if(wasToday)S.date=d.today;render()} });
+    call('getInitData').then(d=>{ if(d.today!==S.today){const wasToday=S.date===S.today;S.today=d.today;if(wasToday)S.date=d.today;render();runAccrue()} });
   }
 });
 
@@ -220,7 +233,9 @@ function renderDay(){
     <div class="bal-label">${esc(k.emoji)} ${esc(k.name)}의 통장 잔액</div>
     <div class="bal ${d.balance<0?'minus':''}">${won(d.balance)}</div>
     ${d.balance<0?'<div class="muted" style="color:var(--red)">마이너스예요. 실천으로 채워 가도록 이야기 나눠 보세요.</div>':''}
-    <button class="btn full" onclick="openSpend()">🛒 쓴 돈 기록하기 (카드·현금)</button>
+    ${jarsHtml(d.jars)}
+    ${interestHtml(d)}
+    ${isGp()?'':'<button class="btn full" onclick="openSpend()">🛒 쓴 돈 기록하기 (카드·현금)</button>'}
     ${goalHtml(k,d.balance)}
     <div class="mini"><div><span class="muted">이번 달 들어온 돈</span><b class="in">+${won(d.monthEarned)}</b></div>
       <div><span class="muted">이번 달 쓴 돈</span><b class="out">-${won(d.monthSpent)}</b></div></div>
@@ -236,19 +251,36 @@ function renderDay(){
   if(weekly.length) h+=`<div class="sec">📅 이번 주 실천 <span class="muted">(월~일 한 주 동안)</span></div>`+weekly.map(itemHtml).join('');
   if(fineItems.length) h+=`<div class="sec">⚠️ 벌금 <span class="muted">(약속을 지키지 못했을 때)</span></div>`+fineItems.map(itemHtml).join('');
   if(!d.items.length) h+='<div class="card muted">등록된 항목이 없어요. 설정 탭에서 항목을 추가해 주세요.</div>';
-  h+=`<div class="sec">🎁 특별 보너스 <span class="muted">(받은 용돈·칭찬 보너스)</span></div>
+  const extras=(d.interests||[]).map(x=>`<div class="row" style="padding:4px 0"><span>🏦 ${esc(x.name)}</span><span class="bonus">+${won(x.amount)}</span></div>`).join('')
+    +(d.cheers||[]).map(c=>`<div class="row" style="padding:4px 0"><span>💌 ${esc(c.name)}</span>${isGp()?'':`<button class="del" onclick="askDelBonus('${c.id}',0)">삭제</button>`}</div>`).join('');
+  h+=`<div class="sec">🎁 특별 보너스 <span class="muted">(받은 용돈·칭찬·응원)</span></div>
     <div class="bcard">
+      ${extras}
       ${d.bonuses.length?d.bonuses.map(b=>`<div class="row" style="padding:4px 0"><span>🎁 ${esc(b.name)}</span>
-        <span><span class="bonus">+${won(b.amount)}</span> <button class="del" onclick="askDelBonus('${b.id}',${b.amount})">삭제</button></span></div>`).join('')
-        :'<div class="muted">할머니·할아버지, 친척, 지인에게 받은 용돈을 여기에 넣어요.(현금 실물은 부모님이 보관)</div>'}
-      <button class="btn full" style="background:#FFB020" onclick="openBonus()">+ 보너스 넣기</button>
+        <span><span class="bonus">+${won(b.amount)}</span> ${isGp()?'':`<button class="del" onclick="askDelBonus('${b.id}',${b.amount})">삭제</button>`}</span></div>`).join('')
+        :(extras?'':'<div class="muted">할머니·할아버지, 친척, 지인에게 받은 용돈을 여기에 넣어요.(현금 실물은 부모님이 보관)</div>')}
+      ${isGp()?`<button class="btn full" style="background:#FFB020" onclick="openCheer()">💌 응원·용돈 보내기</button>`
+        :`<button class="btn full" style="background:#FFB020" onclick="openBonus()">+ 보너스 넣기</button>`}
     </div>
-    <div class="sharecard">
+    <div class="sharecard ${isGp()?'hide':''}">
       <div class="jua" style="font-size:18px">💬 ${d.date===d.today?'오늘':shortDate(d.date)} 결과를 ${esc(k.name)}에게 보내 볼까요?</div>
       <div class="muted" style="margin-top:4px">한 일, 모은 돈, 잔액을 정리해서 카톡·문자로 보낼 수 있어요. 보내기 전에 내용을 보고 한마디 덧붙일 수 있어요.</div>
       <button class="btn full" style="background:var(--green)" onclick="shareDay()">${d.date===d.today?'오늘':prettyDate(d.date)} 결과 보내기</button>
     </div>`;
   $('view').innerHTML=h;
+}
+// 세 개의 통장 (플러스)
+const JAR_LABEL={spend:['🛍️','쓰기'],save:['🫙','저축'],give:['💝','나눔']};
+function jarsHtml(j){
+  if(!j) return '';
+  return `<div class="jars">${['spend','save','give'].map(x=>`<div class="jar ${x}"><span>${JAR_LABEL[x][0]} ${JAR_LABEL[x][1]} <small>${j.ratio[x]}%</small></span><b class="${j[x]<0?'out':''}">${won(j[x])}</b></div>`).join('')}</div>`;
+}
+// 엄마·아빠 은행 이자 안내 (플러스)
+function interestHtml(d){
+  if(!(d.interestRate>0)) return '';
+  const base=d.jars?d.jars.save:d.balance, next=Math.max(0,Math.floor(base*d.interestRate/100));
+  return `<div class="bankline">🏦 엄마·아빠 은행 이자 <b>월 ${d.interestRate}%</b> · 다음 달 1일 예상 <b>+${won(next)}</b>
+    <div class="muted">${d.jars?'저축 통장':'통장'}에 그대로 두면 이자가 붙어요. 쓰지 않고 모을수록 더 많이!</div></div>`;
 }
 function goalHtml(k,bal){
   if(!k.goalName||!k.goalAmount) return '';
@@ -260,7 +292,7 @@ function goalHtml(k,bal){
 function itemHtml(i){
   let boxes='';
   for(let n=1;n<=i.maxCount;n++){
-    boxes+=`<button class="box ${n<=i.count?'on':''}" onclick="tapBox('${i.id}',${n})" aria-label="${n}번째">${n<=i.count?'✓':''}</button>`;
+    boxes+=`<button class="box ${n<=i.count?'on':''}" ${isGp()?'disabled':`onclick="tapBox('${i.id}',${n})"`} aria-label="${n}번째">${n<=i.count?'✓':''}</button>`;
   }
   const cls = (i.count>=i.maxCount?'full':(i.count>0?'some':''))+(i.amount<0?' fine':'');
   const tot=i.amount*i.count, per=i.period==='매일'?'하루':'한 주';
@@ -298,12 +330,15 @@ function buildDayMsg(){
   if(done.length) done.forEach(i=>{const n=d.dayCounts[i.id];L.push(`✅ ${i.name}${n>1?' ×'+n:''}  ${plus(i.amount*n)}`)});
   else L.push('아직 체크한 실천이 없어요.');
   fines.forEach(i=>{const n=d.dayCounts[i.id];L.push(`⚠️ ${i.name}${n>1?' ×'+n:''}  ${won(i.amount*n)}`)});
+  (d.interests||[]).forEach(x=>L.push(`🏦 엄마·아빠 은행 ${x.name}  ${plus(x.amount)}`));
   d.bonuses.forEach(b=>L.push(`🎁 ${b.name}  ${plus(b.amount)}`));
-  d.daySpends.filter(s=>s.method!=='통장 이체').forEach(s=>L.push(`🛒 ${s.name}  -${won(s.amount)}`));
+  (d.cheers||[]).forEach(c=>L.push(`💌 ${c.name}`));
+  d.daySpends.filter(s=>s.method!=='통장 이체').forEach(s=>L.push(`${s.jar==='give'?'💝':'🛒'} ${s.name}  -${won(s.amount)}`));
   d.daySpends.filter(s=>s.method==='통장 이체').forEach(s=>L.push(`🏦 실물 통장에 저축  ${won(s.amount)}`));
   L.push('');
   L.push(`💰 이날 모은 돈: ${plus(d.dayEarned)}`);
   L.push(`📒 지금 통장 잔액: ${won(d.balance)}`);
+  if(d.jars) L.push(`   └ 🛍️ 쓰기 ${won(d.jars.spend)} · 🫙 저축 ${won(d.jars.save)} · 💝 나눔 ${won(d.jars.give)}`);
   const g=goalLine(k,d.balance); if(g) L.push(g);
   L.push('');
   const isToday=d.date===d.today;
@@ -316,6 +351,7 @@ function buildMonthMsg(){
   L.push('');
   L.push(`✅ 실천으로 번 돈  +${won(Lg.monthIn)}`);
   if(Lg.monthBonus) L.push(`🎁 특별 보너스  +${won(Lg.monthBonus)}`);
+  if(Lg.monthInterest) L.push(`🏦 엄마·아빠 은행 이자  +${won(Lg.monthInterest)}`);
   if(Lg.monthFine) L.push(`⚠️ 벌금  -${won(Lg.monthFine)}`);
   if(Lg.monthOut) L.push(`🛒 쓴 돈  -${won(Lg.monthOut)}`);
   if(Lg.monthSaved) L.push(`🏦 실물 통장에 저축  ${won(Lg.monthSaved)}`);
@@ -330,6 +366,7 @@ function buildMonthMsg(){
   }
   L.push('');
   L.push(`📒 지금 통장 잔액: ${won(Lg.balance)}`);
+  if(Lg.jars) L.push(`   └ 🛍️ 쓰기 ${won(Lg.jars.spend)} · 🫙 저축 ${won(Lg.jars.save)} · 💝 나눔 ${won(Lg.jars.give)}`);
   if(Lg.totalSaved) L.push(`🏦 지금까지 저축한 돈: ${won(Lg.totalSaved)}`);
   const g=goalLine(k,Lg.balance); if(g) L.push(g);
   L.push('');
@@ -395,8 +432,8 @@ function doBonus(){
   }).catch(e=>{$('bBtn').disabled=false;toast(errMsg(e))});
 }
 function askDelBonus(id,amt,fromLedger){
-  openModal(`<h3>보너스 기록 삭제</h3><div>${won(amt)} 보너스 기록을 지울까요?</div>
-    <div class="muted" style="margin-top:6px">지우면 그 금액이 잔액에서 빠져요.</div>
+  openModal(`<h3>${amt?'보너스 기록 삭제':'응원 메시지 삭제'}</h3><div>${amt?won(amt)+' 보너스 기록을':'이 응원 메시지를'} 지울까요?</div>
+    <div class="muted" style="margin-top:6px">${amt?'지우면 그 금액이 잔액에서 빠져요.':'잔액에는 영향이 없어요.'}</div>
     <button class="btn full red" id="dbBtn" onclick="doDelBonus('${id}',${fromLedger?1:0})">삭제</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
 }
@@ -409,11 +446,14 @@ function doDelBonus(id,fromLedger){
 }
 
 /* ---------- 지출 (카드·현금) ---------- */
-let spendKind='', spendMethod='카드';
+let spendKind='', spendMethod='카드', spendJar='spend';
 function openSpend(){
-  const k=kid(); spendKind=''; spendMethod=S.methods[0]||'카드';
+  const k=kid(), j=S.day.jars; spendKind=''; spendMethod=S.methods[0]||'카드'; spendJar='spend';
   openModal(`<h3>🛒 쓴 돈 기록하기</h3>
     <div class="muted">${esc(k.emoji)} ${esc(k.name)}의 지금 잔액: <b>${won(S.day.balance)}</b></div>
+    ${j?`<label class="f">어느 통장에서 쓸까요?</label>
+    <div class="seg" id="sJar">${['spend','save','give'].map(x=>`<button type="button" class="${x==='spend'?'on':''}" onclick="pickJar(this,'${x}')">${JAR_LABEL[x][0]} ${JAR_LABEL[x][1]}<br><small>${won(j[x])}</small></button>`).join('')}</div>
+    <div class="muted" style="margin-top:4px">💝 나눔 통장은 기부·선물처럼 남을 위해 쓸 때 골라요.</div>`:''}
     <label class="f">어떻게 줬나요?</label>
     <div class="seg" id="sMethod">${S.methods.map((x,i)=>`<button type="button" class="${x===spendMethod?'on':''}" onclick="pickMethod(this,${i})">${x==='현금'?'💵':'💳'} ${esc(x)}</button>`).join('')}</div>
     <label class="f">무엇을 샀나요? (현금은 쓸 곳)</label><input id="sName" placeholder="예: 색연필, 아이스크림, 현금 용돈">
@@ -427,6 +467,7 @@ function openSpend(){
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
 }
 function pickMethod(btn,i){spendMethod=S.methods[i];document.querySelectorAll('#sMethod button').forEach(b=>b.classList.toggle('on',b===btn))}
+function pickJar(btn,x){spendJar=x;document.querySelectorAll('#sJar button').forEach(b=>b.classList.toggle('on',b===btn))}
 function pickKind(btn,i){spendKind=S.kinds[i];document.querySelectorAll('#sKind button').forEach(b=>b.classList.toggle('on',b===btn))}
 function spendWarn(){
   const amt=Number($('sAmt').value)||0, after=S.day.balance-amt;
@@ -435,7 +476,7 @@ function spendWarn(){
     : (amt>0?`<div class="muted" style="margin-top:8px">기록 후 잔액: <b>${won(after)}</b></div>`:'');
 }
 function doSpend(){
-  const sp={method:spendMethod,name:$('sName').value,amount:Number($('sAmt').value),kind:spendKind,date:$('sDate').value,memo:$('sMemo').value};
+  const sp={method:spendMethod,name:$('sName').value,amount:Number($('sAmt').value),kind:spendKind,date:$('sDate').value,memo:$('sMemo').value,jar:spendJar};
   $('sBtn').disabled=true;
   call('addSpend',S.kidId,sp,S.date).then(d=>{
     S.day=d; closeModal(); renderDay(); toast((sp.method==='현금'?'💵 현금 ':'💳 카드 ')+won(sp.amount)+' 기록했어요');
@@ -470,11 +511,12 @@ function renderLedger(L){
   <div class="card">
     <div class="bal-label">${esc(k.emoji)} ${esc(k.name)}의 앱 통장 잔액</div>
     <div class="bal ${L.balance<0?'minus':''}">${won(L.balance)}</div>
-    <div class="muted">🏦 지금까지 실물 통장으로 옮긴 돈: <b style="color:var(--blue)">${won(L.totalSaved)}</b></div>
-    <button class="btn full" style="background:var(--blue)" onclick="openTransfer()">🏦 실물 통장으로 이체하기</button>
+    ${jarsHtml(L.jars)}
+    <div class="muted" style="margin-top:6px">🏦 지금까지 실물 통장으로 옮긴 돈: <b style="color:var(--blue)">${won(L.totalSaved)}</b></div>
+    ${isGp()?'':'<button class="btn full" style="background:var(--blue)" onclick="openTransfer()">🏦 실물 통장으로 이체하기</button>'}
     <div class="mini">
       <div><span class="muted">실천으로 번 돈</span><b class="in">+${won(L.monthIn)}</b></div>
-      <div><span class="muted">특별 보너스</span><b class="bonus">+${won(L.monthBonus)}</b></div>
+      <div><span class="muted">특별 보너스${L.monthInterest?' · 이자':''}</span><b class="bonus">+${won(L.monthBonus+(L.monthInterest||0))}</b></div>
       <div><span class="muted">쓴 돈</span><b class="out">-${won(L.monthOut)}</b></div>
       <div><span class="muted">통장으로 이체</span><b class="save">-${won(L.monthSaved)}</b></div>
     </div>
@@ -503,21 +545,28 @@ function renderLedger(L){
       left=`<div><b>${shortDate(l.date)}</b> ⚠️ 벌금 ${l.count}번</div><div class="names">${esc(l.detail)}</div>`;
       amt=`<div class="out">-${won(l.amount)}</div>`;
     }else if(l.type==='bonus'){
-      left=`<div><b>${shortDate(l.date)}</b> 🎁 ${esc(l.name)}</div><div class="names"><span class="badge">특별 보너스</span><button class="del" onclick="askDelBonus('${l.id}',${l.amount},true)">삭제</button></div>`;
+      left=`<div><b>${shortDate(l.date)}</b> 🎁 ${esc(l.name)}</div><div class="names"><span class="badge">특별 보너스</span>${isGp()?'':`<button class="del" onclick="askDelBonus('${l.id}',${l.amount},true)">삭제</button>`}</div>`;
       amt=`<div class="bonus">+${won(l.amount)}</div>`;
+    }else if(l.type==='interest'){
+      left=`<div><b>${shortDate(l.date)}</b> 🏦 엄마·아빠 은행 ${esc(l.name)}</div><div class="names"><span class="badge">이자</span></div>`;
+      amt=`<div class="bonus">+${won(l.amount)}</div>`;
+    }else if(l.type==='cheer'){
+      left=`<div><b>${shortDate(l.date)}</b> 💌 ${esc(l.name)}</div><div class="names"><span class="badge">응원 메시지</span>${isGp()?'':`<button class="del" onclick="askDelBonus('${l.id}',0,true)">삭제</button>`}</div>`;
+      amt=`<div class="muted">💌</div>`;
     }else if(l.type==='save'){
       left=`<div><b>${shortDate(l.date)}</b> 🏦 실물 통장으로 이체</div><div class="names">${esc(l.memo)} <button class="del" onclick="askDelSpend('${l.id}')">삭제</button></div>`;
       amt=`<div class="save">-${won(l.amount)}</div>`;
     }else{
       left=`<div><b>${shortDate(l.date)}</b> ${l.method==='현금'?'💵':'💳'} ${esc(l.name)}</div>
-        <div class="names">${kindBadge(l.kind)}${esc(l.memo)} <button class="del" onclick="askDelSpend('${l.id}')">삭제</button></div>`;
+        <div class="names">${L.jars&&l.jar!=='spend'?`<span class="badge">${JAR_LABEL[l.jar][0]} ${JAR_LABEL[l.jar][1]} 통장</span>`:''}${kindBadge(l.kind)}${esc(l.memo)} ${isGp()?'':`<button class="del" onclick="askDelSpend('${l.id}')">삭제</button>`}</div>`;
       amt=`<div class="out">-${won(l.amount)}</div>`;
     }
     return `<div class="line"><div class="l">${left}</div><div class="r">${amt}<div class="muted">잔액 ${won(l.balance)}</div></div></div>`;
   }).join('');
   const mm=Number(L.month.slice(5));
   h+=`</div>
-    <div class="sharecard">
+    ${plusShortcutsHtml()}
+    <div class="sharecard ${isGp()?'hide':''}">
       <div class="jua" style="font-size:18px">💬 ${mm}월 통장을 ${esc(k.name)}에게 보내 볼까요?</div>
       <div class="muted" style="margin-top:4px">번 돈, 쓴 돈, 저축, 많이 실천한 것을 정리해서 카톡·문자로 보낼 수 있어요. 보내기 전에 내용을 보고 한마디 덧붙일 수 있어요.</div>
       <button class="btn full" style="background:var(--green)" onclick="shareMonth()">${mm}월 통장 보내기</button>
@@ -528,10 +577,11 @@ function renderLedger(L){
 
 /* ---------- 실물 통장 이체 ---------- */
 function openTransfer(){
-  const k=kid(), bal=S.ledger?S.ledger.balance:0;
-  if(bal<=0){toast('이체할 잔액이 없어요');return}
+  const k=kid(), j=S.ledger&&S.ledger.jars, bal=j?Math.min(j.save,S.ledger.balance):(S.ledger?S.ledger.balance:0);
+  if(bal<=0){toast(j?'저축 통장에 이체할 돈이 없어요':'이체할 잔액이 없어요');return}
   openModal(`<h3>🏦 실물 통장으로 이체하기</h3>
     <div class="muted">${esc(k.emoji)} ${esc(k.name)}의 앱 잔액: <b>${won(bal)}</b><br>실제 은행 통장에 넣은 금액만큼 앱 잔액에서 빼요.</div>
+    ${S.ledger&&S.ledger.jars?`<div class="tip">🫙 저축 통장(${won(S.ledger.jars.save)})에서 빠져요.</div>`:''}
     <label class="f">이체한 금액(원)</label><input id="tAmt" type="number" inputmode="numeric" step="1000" value="${Math.floor(bal/1000)*1000||bal}">
     <div class="chips" style="margin-top:6px"><button type="button" onclick="$('tAmt').value=${bal}">전액 ${won(bal)}</button>
       <button type="button" onclick="$('tAmt').value=${Math.floor(bal/2/100)*100}">절반</button></div>
@@ -550,7 +600,8 @@ function doTransfer(){
 
 /* ---------- 설정 ---------- */
 function renderManage(){
-  const est = S.kids.map(k=>{
+  if(isGp()) return renderGpManage();
+  const est =S.kids.map(k=>{
     const its=S.items.filter(i=>i.active&&i.amount>0&&(i.target==='ALL'||i.target===k.id));
     const calc=f=>{
       const d=its.filter(i=>i.period==='매일').reduce((s,i)=>s+i.amount*f(i),0);
@@ -561,7 +612,7 @@ function renderManage(){
       <span class="r"><b>1번씩: 약 ${won(calc(()=>1))}</b><br><span class="muted">최대 횟수까지: 약 ${won(calc(i=>i.maxCount))}</span></span></div>`;
   }).join('');
   const kidName=id=>id==='ALL'?'모두':((S.kids.find(k=>k.id===id)||{}).name||'(삭제된 아이)');
-  let h='';
+  let h=plusCardHtml();
   h+=`<div class="card"><div class="jua" style="font-size:18px">📊 한 달 예상 용돈</div>${est}
       <div class="muted" style="margin-top:6px">매일 항목 × 30일 + 매주 항목 × 4.3주 기준(벌금 제외)</div></div>`;
   h+=`<div class="card"><div class="row"><div class="jua" style="font-size:18px">✅ 실천 항목</div><button class="btn sm" onclick="editItem()">+ 항목 추가</button></div>`+
@@ -572,7 +623,8 @@ function renderManage(){
       <button class="btn sm ghost" onclick="askDelItem('${i.id}')">삭제</button></div>`).join(''):'<div class="muted">항목이 없어요</div>')+`</div>`;
   h+=`<div class="card"><div class="row"><div class="jua" style="font-size:18px">👧 아이</div><button class="btn sm" onclick="editKid()">+ 아이 추가</button></div>`+
     S.kids.map(k=>`<div class="mitem"><div class="t"><b>${esc(k.emoji)} ${esc(k.name)}</b> <span class="muted">${esc(k.desc)}</span>
-      ${k.goalName?`<div class="muted">목표 ${esc(k.goalName)} ${won(k.goalAmount)}</div>`:''}</div>
+      ${k.goalName?`<div class="muted">목표 ${esc(k.goalName)} ${won(k.goalAmount)}</div>`:''}
+      ${kidPlusBadges(k)}</div>
       <button class="btn sm ghost" onclick="editKid('${k.id}')">수정</button>
       <button class="btn sm ghost" onclick="askDelKid('${k.id}')">삭제</button></div>`).join('')+`</div>`;
   h+=familyCardHtml();
@@ -632,12 +684,13 @@ function editKid(id){
     <label class="f">설명</label><input id="kDesc" value="${esc(k.desc)}" placeholder="예: 초등학교 2학년">
     <label class="f">저축 목표 (선택)</label><input id="kGoal" value="${esc(k.goalName)}" placeholder="예: 레고 자동차">
     <label class="f">목표 금액(원)</label><input id="kGoalAmt" type="number" inputmode="numeric" step="1000" value="${k.goalAmount||''}">
+    ${kidPlusFields(k)}
     <button class="btn full" id="kBtn" onclick="doSaveKid('${id||''}')">저장</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
 }
 function doSaveKid(id){
-  const k={id:id,name:$('kName').value,desc:$('kDesc').value,emoji:$('kEmo').value,
-    goalName:$('kGoal').value,goalAmount:Number($('kGoalAmt').value)};
+  const k=Object.assign({id:id,name:$('kName').value,desc:$('kDesc').value,emoji:$('kEmo').value,
+    goalName:$('kGoal').value,goalAmount:Number($('kGoalAmt').value)}, readKidPlusFields());
   $('kBtn').disabled=true;
   call('saveKid',k).then(d=>afterSave(d,'저장했어요')).catch(e=>{$('kBtn').disabled=false;toast(errMsg(e))});
 }
@@ -661,6 +714,7 @@ function familyCardHtml(){
     <div class="code">${esc(Sync.shareCode(S.family))}</div>
     <div class="muted" id="syncStatus">${statusHtml()}</div>
     <button class="btn full" style="background:var(--green)" onclick="shareFamilyCode()">💬 가족 초대 보내기 (앱 설치 링크 포함)</button>
+    <button class="btn full" style="background:#B07CE8" onclick="shareGpInvite()">👵 할머니·할아버지 초대하기 ${plusTag()}</button>
     <button class="btn full ghost" onclick="askLeaveFamily()">이 휴대폰 연결 끊기</button>
     <button class="btn full ghost" style="color:var(--red)" onclick="askDestroyFamily()">가족 데이터 서버에서 모두 삭제</button></div>`;
 }

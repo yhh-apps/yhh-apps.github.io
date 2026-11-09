@@ -124,6 +124,43 @@
   .demobar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#EEF6FF;color:#2D5B9A;
     border-radius:14px;padding:10px 12px;font-size:13px;margin-bottom:12px}
   .demobar .btn{flex:0 0 auto;background:var(--blue)}
+  /* 플러스 */
+  .jars{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
+  .jar{border-radius:12px;padding:8px;text-align:center;font-size:12px;min-width:0}
+  .jar span{display:block;color:var(--sub)} .jar small{font-size:10px}
+  .jar b{display:block;font-family:'Jua',sans-serif;font-weight:400;font-size:17px;margin-top:2px}
+  .jar.spend{background:#FFF1DC} .jar.save{background:#E6F0FF} .jar.give{background:#FDEBF3}
+  .bankline{background:#EEF4FF;border-radius:12px;padding:8px 10px;margin-top:10px;font-size:13px;color:#2D5B9A}
+  .plustag{display:inline-block;font-size:11px;background:#F1EAFF;color:#7C5CE0;border-radius:99px;padding:1px 7px;margin-left:4px;vertical-align:middle}
+  .pluscard{background:linear-gradient(135deg,#F3EEFF,#FFF1DC);border:2px solid #E3D6FF;border-radius:18px;padding:14px 16px;margin-bottom:12px;cursor:pointer}
+  .promo{display:inline-block;margin-top:8px;background:#7C5CE0;color:#fff;border-radius:99px;padding:4px 10px;font-size:12px;font-weight:700}
+  .promo.big{display:block;text-align:center;font-size:14px;padding:8px;margin-top:14px}
+  .plushero{background:linear-gradient(135deg,#F3EEFF,#FFF1DC);border-radius:16px;padding:14px;margin-bottom:10px}
+  .pfeat{display:flex;gap:10px;padding:8px 2px;border-bottom:1px dashed var(--line)}
+  .pfeat .pico{font-size:26px;flex:0 0 34px;text-align:center}
+  .plusbox{background:#F7F3FF;border:1px solid #E3D6FF;border-radius:14px;padding:10px 12px;margin-top:14px}
+  .seg button small{font-size:11px;color:var(--sub)}
+  canvas.sign{width:100%;height:96px;border:2px dashed var(--line);border-radius:10px;background:#fff;touch-action:none}
+  .contract{background:#FFFDF7;border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;line-height:1.6}
+  .contract ul{margin:4px 0 8px;padding-left:20px}
+  .ctitle{font-family:'Jua',sans-serif;font-size:24px;text-align:center;margin-bottom:6px}
+  .csec{font-weight:700;margin-top:8px}
+  .csigns{display:flex;gap:16px;margin-top:10px}.csigns>div{flex:1;text-align:center}
+  .csigns img{width:100%;max-height:90px;object-fit:contain}.sline{display:block;border-bottom:1px solid #999;height:60px}
+  .album{background:linear-gradient(160deg,#FFF8EC,#F3EEFF);border-radius:18px;padding:16px;border:2px solid #E3D6FF}
+  .ahead{display:flex;gap:12px;align-items:center}.aemoji{font-size:44px}
+  .agrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+  .astat{background:#fff;border-radius:12px;padding:8px 4px;text-align:center}
+  .aico{font-size:20px}.aval{font-family:'Jua',sans-serif;font-size:16px}.alab{font-size:11px;color:var(--sub)}
+  .atop{background:#fff;border-radius:12px;padding:10px 12px;margin-top:10px}
+  .amsg{margin-top:12px;text-align:center;font-family:'Jua',sans-serif;font-size:17px;color:#7C5CE0}
+  #printArea{display:none}
+  @media print{
+    body>*:not(#printArea){display:none!important}
+    #printArea{display:block!important}
+    .contract.print{border:0;font-size:15px}
+    .album{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
   .sharecard{background:#EAF8F0;border:2px solid #BDEBD2;border-radius:16px;padding:14px;margin-top:16px}
   .code{font-family:'Jua',sans-serif;font-size:32px;letter-spacing:3px;text-align:center;background:var(--soft);border-radius:14px;padding:10px;margin:10px 0}
   .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:#bbb;vertical-align:middle}
@@ -154,11 +191,14 @@
 
 <div class="modal" id="modal" onclick="if(event.target===this)closeModal()"><div class="sheet" id="sheet"></div></div>
 <div class="toast" id="toast"></div>
+<div id="printArea"></div>
 <input type="file" id="importFile" accept="application/json,.json" class="hide" onchange="doImport(this)">
 
+<script src="plus-config.js"></script>
 <script src="store.js"></script>
 <script src="firebase-config.js"></script>
 <script src="sync.js"></script>
+<script src="plus.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
