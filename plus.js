@@ -25,7 +25,8 @@ const PLUS_FEATURES=[
   ['🫙','세 개의 통장','들어온 용돈을 쓰기·저축·나눔으로 자동으로 나눠요. 돈을 목적에 맞게 나누는 습관이 생겨요.'],
   ['📜','용돈 계약서','실천 약속·벌금·용돈 쓰는 규칙을 아이와 함께 정하고, 손가락으로 서명해 출력해요.'],
   ['🎖️','성장 앨범','한 달·한 해 동안의 실천 횟수, 최장 연속 기록, 저축·나눔을 예쁜 카드로 남겨요.'],
-  ['👵','할머니·할아버지 초대','조부모님이 손주의 습관을 보고 응원 메시지와 용돈을 직접 보낼 수 있어요.']
+  ['👵','할머니·할아버지 초대','조부모님이 손주의 습관을 보고 응원 메시지와 용돈을 보내요. 카카오페이·토스 송금 화면이 바로 열려요.'],
+  ['🧒','아이가 직접 참여','아이가 실천하고 사진과 함께 「했어요!」를 보내면 엄마·아빠가 승인해요. 저축·소비 목표도 아이가 정해요.']
 ];
 function openPlusPage(){
   const p=S.plus||{};
@@ -87,7 +88,8 @@ function kidPlusBadges(k){
   if(k.jars&&k.jars.on) b.push(`<span class="badge">🫙 ${k.jars.spend}/${k.jars.save}/${k.jars.give}</span>`);
   return `<div style="margin-top:4px">${b.join('')}
     <button class="btn sm ghost" style="margin-top:4px" onclick="openContract('${k.id}')">📜 계약서</button>
-    <button class="btn sm ghost" style="margin-top:4px" onclick="openAlbum('${k.id}')">🎖️ 앨범</button></div>`;
+    <button class="btn sm ghost" style="margin-top:4px" onclick="openAlbum('${k.id}')">🎖️ 앨범</button>
+    <button class="btn sm ghost" style="margin-top:4px" onclick="openKidAccess('${k.id}')">🧒 아이 화면</button></div>`;
 }
 
 /* ---------- 📜 용돈 계약서 ---------- */
@@ -228,7 +230,8 @@ function pickCheerAmt(btn,v){cheerAmt=v;document.querySelectorAll('#chAmt button
 function doCheer(){
   $('chBtn').disabled=true;
   call('addCheer',S.kidId,{from:$('chFrom').value,msg:$('chMsg').value,amount:cheerAmt},S.date).then(d=>{
-    S.day=d; closeModal(); renderDay(); toast(cheerAmt?'💌 응원과 용돈을 보냈어요':'💌 응원을 보냈어요');
+    S.day=d; closeModal(); renderDay(); toast(cheerAmt?'💌 응원과 용돈을 기록했어요':'💌 응원을 보냈어요');
+    if(cheerAmt) setTimeout(()=>openPayFlow(cheerAmt),400);
   }).catch(e=>{$('chBtn').disabled=false;toast(errMsg(e))});
 }
 
@@ -290,7 +293,7 @@ function askBeParent(){
 
 /* ---------- 통장 탭에 계약서·앨범 바로가기 ---------- */
 function plusShortcutsHtml(){
-  if(isGp()) return '';
+  if(viewOnly()) return '';
   const k=kid();
   return `<div class="row" style="gap:8px;margin-top:12px">
     <button class="btn ghost" style="flex:1" onclick="openContract('${k.id}')">📜 용돈 계약서 ${S.plus.active?'':'⭐'}</button>

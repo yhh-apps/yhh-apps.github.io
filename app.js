@@ -33,16 +33,17 @@ document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>setTab(b.dataset.tab)
 if(/NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|KAKAOTALK|DaumApps|everytimeApp|; wv\)/i.test(navigator.userAgent)) $('inappBar').classList.remove('hide');
 
 /* 가족 초대 링크: ?join=가족코드 로 열면 코드를 자동으로 넣어 줌 */
-let INVITE=null, INVITE_GP=false;
+let INVITE=null, INVITE_GP=false, INVITE_KID='';
 try{
   const q=new URLSearchParams(location.search), j=(q.get('join')||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
-  if(j.length===8){ INVITE=j; INVITE_GP=q.get('gp')==='1'; }
+  if(j.length===8){ INVITE=j; INVITE_GP=q.get('gp')==='1'; INVITE_KID=(q.get('kid')||'').replace(/[^a-z0-9]/g,'').slice(0,30); }
   if(q.has('join')) history.replaceState(null,'',location.pathname);
 }catch(e){}
 function applyInvite(){
   if(!INVITE||!Sync.available()) return;
   const c=INVITE; INVITE=null; const shown=Sync.shareCode(c);
   if(!S.kids.length&&INVITE_GP){ renderGpSetup(c); return; } // 조부모 초대
+  if(!S.kids.length&&INVITE_KID){ renderKidSetup(c,INVITE_KID); return; } // 아이 기기 초대
   if(!S.kids.length&&$('joinCode')){ // 첫 화면
     $('joinCode').value=shown; $('joinCode').scrollIntoView({block:'center'});
     toast('가족 코드가 입력됐어요. 「가족 코드로 참여하기」를 눌러 주세요');
@@ -64,7 +65,7 @@ function boot(){
     applyInit(d);
     if(!d.ready){ renderSetup(); applyInvite(); return; }
     if(d.family) Sync.resume();
-    if(d.hasPin){S.locked=true;return renderLock();}
+    if(d.hasPin&&d.role!=='kid'){S.locked=true;return renderLock();}
     startMain();
   }).catch(showErr);
 }
@@ -98,15 +99,19 @@ function statusHtml(){
 function applyInit(d){
   S.kids=d.kids;S.items=d.items;S.kinds=d.kinds;S.methods=d.methods;S.hasPin=d.hasPin;S.demo=!!d.demo;S.family=d.family||null;
   S.plus=d.plus||{active:false};S.role=d.role||'parent';S.gpName=d.gpName||'';
+  const prevPend=S.pendingCount||0; S.pendingCount=d.pendingCount||0; S.pay=d.pay||null; S.kidRole=d.kidRole||null;
+  if(S.role==='parent'&&S.pendingCount>prevPend&&S.kids.length&&prevPend>=0&&S.started) toast('📸 아이가 실천 인증을 보냈어요!');
+  if(S.kidRole) S.kidId=S.kidRole.kidId;
+  setTabLabels();
   S.today=d.today;
   $('demoBar').classList.toggle('hide',!S.demo);
   if(!S.kids.some(k=>k.id===S.kidId)) S.kidId=S.kids[0]&&S.kids[0].id;
 }
 function startMain(){
-  S.locked=false;
+  S.locked=false; S.started=true;
   S.date=S.date||S.today; S.month=S.month||S.today.slice(0,7);
   const saved=load('kidId');
-  if(S.kids.some(k=>k.id===saved)) S.kidId=saved;
+  if(S.kids.some(k=>k.id===saved)&&!S.kidRole) S.kidId=saved;
   $('tabs').classList.remove('hide');
   $('demoBar').classList.toggle('hide',!S.demo);
   renderKids(); render();
@@ -190,7 +195,7 @@ function unlock(){
 let hiddenAt=0;
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden){hiddenAt=Date.now();return}
-  if(S.hasPin&&!S.locked&&hiddenAt&&Date.now()-hiddenAt>LOCK_AFTER_MS){S.locked=true;renderLock()}
+  if(S.hasPin&&!isKid()&&!S.locked&&hiddenAt&&Date.now()-hiddenAt>LOCK_AFTER_MS){S.locked=true;renderLock()}
   else if(!S.locked&&S.kids.length){ // 날짜가 바뀌었으면 오늘로
     call('getInitData').then(d=>{ if(d.today!==S.today){const wasToday=S.date===S.today;S.today=d.today;if(wasToday)S.date=d.today;render();runAccrue()} });
   }
@@ -200,7 +205,7 @@ document.addEventListener('visibilitychange',()=>{
 function renderKids(){
   $('kids').innerHTML = S.kids.map(k=>
     `<button class="kid ${k.id===S.kidId?'on':''}" onclick="pickKid('${k.id}')">${esc(k.emoji)} ${esc(k.name)}</button>`).join('');
-  $('kids').style.display = (S.tab==='manage'||S.kids.length<2)?'none':'flex';
+  $('kids').style.display = (S.tab==='manage'||S.kids.length<2||isKid())?'none':'flex';
 }
 function pickKid(id){S.kidId=id;store('kidId',id);renderKids();render()}
 function setTab(t){
@@ -210,7 +215,7 @@ function setTab(t){
 }
 function render(){
   if(S.locked) return;
-  if(S.tab==='manage') return renderManage();
+  if(S.tab==='manage') return isKid()?renderKidGoals():renderManage();
   if(S.tab==='check') return loadDay();
   if(S.tab==='ledger') return loadLedger();
 }
@@ -224,11 +229,12 @@ function moveDate(n){const nd=addDays(S.date,n); if(nd>S.today) return; S.date=n
 function goToday(){S.date=S.today;loadDay()}
 
 function renderDay(){
+  if(isKid()) return renderKidDay();
   const d=S.day, k=kid();
   const daily=d.items.filter(i=>i.period==='매일'&&i.amount>=0), weekly=d.items.filter(i=>i.period==='매주'&&i.amount>=0);
   const fineItems=d.items.filter(i=>i.amount<0);
   const dayMax = daily.reduce((s,i)=>s+i.amount*i.maxCount,0);
-  let h = `
+  let h = `${pendingBannerHtml()}
   <div class="card">
     <div class="bal-label">${esc(k.emoji)} ${esc(k.name)}의 통장 잔액</div>
     <div class="bal ${d.balance<0?'minus':''}">${won(d.balance)}</div>
@@ -236,7 +242,7 @@ function renderDay(){
     ${jarsHtml(d.jars)}
     ${interestHtml(d)}
     ${isGp()?'':'<button class="btn full" onclick="openSpend()">🛒 쓴 돈 기록하기 (카드·현금)</button>'}
-    ${goalHtml(k,d.balance)}
+    ${goalHtml(k,d.balance)}${spendGoalHtml(d.spendGoal)}
     <div class="mini"><div><span class="muted">이번 달 들어온 돈</span><b class="in">+${won(d.monthEarned)}</b></div>
       <div><span class="muted">이번 달 쓴 돈</span><b class="out">-${won(d.monthSpent)}</b></div></div>
   </div>
@@ -513,7 +519,7 @@ function renderLedger(L){
     <div class="bal ${L.balance<0?'minus':''}">${won(L.balance)}</div>
     ${jarsHtml(L.jars)}
     <div class="muted" style="margin-top:6px">🏦 지금까지 실물 통장으로 옮긴 돈: <b style="color:var(--blue)">${won(L.totalSaved)}</b></div>
-    ${isGp()?'':'<button class="btn full" style="background:var(--blue)" onclick="openTransfer()">🏦 실물 통장으로 이체하기</button>'}
+    ${viewOnly()?'':'<button class="btn full" style="background:var(--blue)" onclick="openTransfer()">🏦 실물 통장으로 이체하기</button>'}
     <div class="mini">
       <div><span class="muted">실천으로 번 돈</span><b class="in">+${won(L.monthIn)}</b></div>
       <div><span class="muted">특별 보너스${L.monthInterest?' · 이자':''}</span><b class="bonus">+${won(L.monthBonus+(L.monthInterest||0))}</b></div>
@@ -545,20 +551,20 @@ function renderLedger(L){
       left=`<div><b>${shortDate(l.date)}</b> ⚠️ 벌금 ${l.count}번</div><div class="names">${esc(l.detail)}</div>`;
       amt=`<div class="out">-${won(l.amount)}</div>`;
     }else if(l.type==='bonus'){
-      left=`<div><b>${shortDate(l.date)}</b> 🎁 ${esc(l.name)}</div><div class="names"><span class="badge">특별 보너스</span>${isGp()?'':`<button class="del" onclick="askDelBonus('${l.id}',${l.amount},true)">삭제</button>`}</div>`;
+      left=`<div><b>${shortDate(l.date)}</b> 🎁 ${esc(l.name)}</div><div class="names"><span class="badge">특별 보너스</span>${viewOnly()?'':`<button class="del" onclick="askDelBonus('${l.id}',${l.amount},true)">삭제</button>`}</div>`;
       amt=`<div class="bonus">+${won(l.amount)}</div>`;
     }else if(l.type==='interest'){
       left=`<div><b>${shortDate(l.date)}</b> 🏦 엄마·아빠 은행 ${esc(l.name)}</div><div class="names"><span class="badge">이자</span></div>`;
       amt=`<div class="bonus">+${won(l.amount)}</div>`;
     }else if(l.type==='cheer'){
-      left=`<div><b>${shortDate(l.date)}</b> 💌 ${esc(l.name)}</div><div class="names"><span class="badge">응원 메시지</span>${isGp()?'':`<button class="del" onclick="askDelBonus('${l.id}',0,true)">삭제</button>`}</div>`;
+      left=`<div><b>${shortDate(l.date)}</b> 💌 ${esc(l.name)}</div><div class="names"><span class="badge">응원 메시지</span>${viewOnly()?'':`<button class="del" onclick="askDelBonus('${l.id}',0,true)">삭제</button>`}</div>`;
       amt=`<div class="muted">💌</div>`;
     }else if(l.type==='save'){
       left=`<div><b>${shortDate(l.date)}</b> 🏦 실물 통장으로 이체</div><div class="names">${esc(l.memo)} <button class="del" onclick="askDelSpend('${l.id}')">삭제</button></div>`;
       amt=`<div class="save">-${won(l.amount)}</div>`;
     }else{
       left=`<div><b>${shortDate(l.date)}</b> ${l.method==='현금'?'💵':'💳'} ${esc(l.name)}</div>
-        <div class="names">${L.jars&&l.jar!=='spend'?`<span class="badge">${JAR_LABEL[l.jar][0]} ${JAR_LABEL[l.jar][1]} 통장</span>`:''}${kindBadge(l.kind)}${esc(l.memo)} ${isGp()?'':`<button class="del" onclick="askDelSpend('${l.id}')">삭제</button>`}</div>`;
+        <div class="names">${L.jars&&l.jar!=='spend'?`<span class="badge">${JAR_LABEL[l.jar][0]} ${JAR_LABEL[l.jar][1]} 통장</span>`:''}${kindBadge(l.kind)}${esc(l.memo)} ${viewOnly()?'':`<button class="del" onclick="askDelSpend('${l.id}')">삭제</button>`}</div>`;
       amt=`<div class="out">-${won(l.amount)}</div>`;
     }
     return `<div class="line"><div class="l">${left}</div><div class="r">${amt}<div class="muted">잔액 ${won(l.balance)}</div></div></div>`;
@@ -566,7 +572,7 @@ function renderLedger(L){
   const mm=Number(L.month.slice(5));
   h+=`</div>
     ${plusShortcutsHtml()}
-    <div class="sharecard ${isGp()?'hide':''}">
+    <div class="sharecard ${viewOnly()?'hide':''}">
       <div class="jua" style="font-size:18px">💬 ${mm}월 통장을 ${esc(k.name)}에게 보내 볼까요?</div>
       <div class="muted" style="margin-top:4px">번 돈, 쓴 돈, 저축, 많이 실천한 것을 정리해서 카톡·문자로 보낼 수 있어요. 보내기 전에 내용을 보고 한마디 덧붙일 수 있어요.</div>
       <button class="btn full" style="background:var(--green)" onclick="shareMonth()">${mm}월 통장 보내기</button>
@@ -628,6 +634,7 @@ function renderManage(){
       <button class="btn sm ghost" onclick="editKid('${k.id}')">수정</button>
       <button class="btn sm ghost" onclick="askDelKid('${k.id}')">삭제</button></div>`).join('')+`</div>`;
   h+=familyCardHtml();
+  h+=payCardHtml();
   h+=`<div class="card"><div class="jua" style="font-size:18px">🔒 앱 잠금</div>
       <div class="muted" style="margin-top:4px">${S.hasPin?'앱을 열 때 비밀번호를 물어봐요. (5분 넘게 나갔다 오면 다시 잠겨요)':'지금은 잠금이 꺼져 있어요. 아이가 마음대로 고치지 못하게 하려면 비밀번호를 정해 주세요.'}</div>
       <button class="btn full ghost" onclick="openPin()">${S.hasPin?'비밀번호 바꾸기 / 끄기':'비밀번호 정하기'}</button></div>`;

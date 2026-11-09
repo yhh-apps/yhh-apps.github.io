@@ -72,7 +72,7 @@
 
   function migrate_(d) {
     d.settings = d.settings || {};
-    ['kids', 'items', 'records', 'spends'].forEach(k => { if (!Array.isArray(d[k])) d[k] = []; });
+    ['kids', 'items', 'records', 'spends', 'requests', 'meta'].forEach(k => { if (!Array.isArray(d[k])) d[k] = []; });
     d.v = VERSION;
   }
 
@@ -93,6 +93,7 @@
     dt.setUTCDate(dt.getUTCDate() - ((dt.getUTCDay() + 6) % 7));
     return dt.toISOString().slice(0, 10);
   }
+  function role_() { const r = D && D.settings.role; return r === 'gp' || r === 'kid' ? r : 'parent'; }
   function need_() { if (!D) throw new Error('먼저 시작 설정을 해 주세요.'); }
   function kids_() { return D.kids.slice().sort((a, b) => a.order - b.order); }
   function items_() { return D.items.slice().sort((a, b) => a.order - b.order); }
@@ -191,7 +192,7 @@
   function setupApp_(kidNames) {
     const names = (kidNames || []).map(str_).filter(Boolean).slice(0, 10);
     if (!names.length) throw new Error('아이 이름을 한 명 이상 입력해 주세요.');
-    D = { v: VERSION, settings: { pin: '' }, kids: [], items: [], records: [], spends: [], createdAt: now_() };
+    D = { v: VERSION, settings: { pin: '' }, kids: [], items: [], records: [], spends: [], requests: [], meta: [], createdAt: now_() };
     names.forEach((n, i) => D.kids.push({ id: newId_('k'), name: n, desc: '', emoji: EMOJIS[i % EMOJIS.length], goalName: '', goalAmount: 0, order: i + 1 }));
     DEFAULT_ITEMS.forEach((r, i) => D.items.push({ id: newId_('i'), name: r[0], meaning: r[1], amount: r[2], period: r[3], target: 'ALL', active: true, order: i + 1, maxCount: DEFAULT_MAX }));
     return getInitData();
@@ -280,7 +281,10 @@
       methods: METHODS,
       hasPin: !!(D && D.settings.pin),
       plus: plus_(),
-      role: D && D.settings.role === 'gp' ? 'gp' : 'parent', // 이 휴대폰의 역할 (조부모 모드는 기기마다)
+      role: role_(), // 이 휴대폰의 역할: parent / gp(조부모: 보기·응원) / kid(아이: 했어요 요청·내 목표) — 기기마다
+      kidRole: D && D.settings.role === 'kid' ? { kidId: D.settings.kidId, fromParent: !!D.settings.kidFromParent } : null,
+      pendingCount: D ? D.requests.filter(r => r.status === 'pending').length : 0,
+      pay: D ? payInfo_() : null,
       gpName: D ? str_(D.settings.gpName) : ''
     };
   }
@@ -314,6 +318,12 @@
       })(),
       jars: plus_().active ? jars_(kidObj_(kidId), recs, spends) : null,
       interestRate: plus_().active ? num_((kidObj_(kidId) || {}).interestRate) : 0,
+      requests: D.requests.filter(r => r.kidId === kidId).map(r => ({ id: r.id, itemId: r.itemId, itemName: r.itemName, date: r.date, status: r.status, reason: r.reason || '', amount: r.amount })),
+      spendGoal: (() => {
+        const k = kidObj_(kidId); if (!k.spendGoal || k.spendGoalMonth !== month) return null;
+        const used = sum_(spends.filter(s => s.date.slice(0, 7) === month && s.method !== TRANSFER && s.kind === KINDS[1]));
+        return { limit: k.spendGoal, used: used };
+      })(),
       balance: earned - out, totalEarned: earned,
       monthEarned: sum_(recs.filter(r => r.date.slice(0, 7) === month)),
       monthSpent: sum_(realSpends.filter(s => s.date.slice(0, 7) === month)),
@@ -400,8 +410,117 @@
     need_();
     D.settings.role = role === 'gp' ? 'gp' : 'parent';
     D.settings.gpName = str_(gpName).slice(0, 10);
+    delete D.settings.kidId; delete D.settings.kidFromParent;
     return getInitData();
   }
+
+  /* ===================== 👧 아이 참여 (플러스) ===================== */
+
+  /** 이 휴대폰을 아이 화면으로 — fromParent: 부모 폰을 잠시 아이 모드로 (돌아갈 때 비밀번호) */
+  function setKidRole(kidId, fromParent) {
+    need_(); needPlus_();
+    if (!hasKid_(kidId)) throw new Error('아이를 확인해 주세요.');
+    if (fromParent && !D.settings.pin) throw new Error('아이 모드에서 부모 화면으로 돌아올 때 쓸 앱 잠금 비밀번호를 먼저 정해 주세요. (설정 → 앱 잠금)');
+    D.settings.role = 'kid'; D.settings.kidId = kidId; D.settings.kidFromParent = !!fromParent;
+    return getInitData();
+  }
+  /** 아이 모드 끝내기 (부모 폰): 비밀번호 확인 */
+  function exitKidRole(pin) {
+    need_();
+    if (D.settings.role !== 'kid') return getInitData();
+    if (!D.settings.kidFromParent) throw new Error('아이 전용 기기예요.');
+    checkPin_(pin);
+    D.settings.role = 'parent'; delete D.settings.kidId; delete D.settings.kidFromParent;
+    return getInitData();
+  }
+  /** 부모 동의: 아이 기기 초대·사진 인증을 쓰기 전에 한 번 */
+  function setKidConsent(kidId) {
+    need_(); needPlus_();
+    const k = D.kids.find(x => x.id === kidId); if (!k) throw new Error('아이를 확인해 주세요.');
+    k.consentAt = today_();
+    return getInitData();
+  }
+
+  const PHOTO_RE = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
+  /** 아이: 「했어요!」 요청 (사진 선택) — 부모가 승인하면 체크 */
+  function submitRequest(kidId, itemId, photo, memo) {
+    need_(); needPlus_();
+    const item = D.items.find(i => i.id === itemId);
+    if (!item || !item.active || !(item.target === 'ALL' || item.target === kidId)) throw new Error('실천 항목을 찾을 수 없어요.');
+    if (item.amount < 0) throw new Error('벌금 항목은 요청할 수 없어요.');
+    photo = String(photo || '');
+    if (photo && (!PHOTO_RE.test(photo) || photo.length > 400000)) throw new Error('사진을 다시 찍어 주세요.');
+    if (photo && !kidObj_(kidId).consentAt) throw new Error('사진 인증은 부모님 동의가 필요해요.');
+    const date = today_();
+    const done = D.records.filter(matcher_(item, kidId, date)).length;
+    const waiting = D.requests.filter(r => r.kidId === kidId && r.itemId === itemId && r.status === 'pending' &&
+      (item.period === '매일' ? r.date === date : weekStart_(r.date) === weekStart_(date))).length;
+    if (done + waiting >= item.maxCount) throw new Error(item.period === '매일' ? '오늘 할 수 있는 만큼 다 했어요!' : '이번 주에 할 수 있는 만큼 다 했어요!');
+    D.requests.push({ id: newId_('q'), kidId: kidId, itemId: itemId, itemName: item.name, amount: item.amount, date: date,
+      photo: photo, memo: str_(memo).slice(0, 100), status: 'pending', ts: now_() });
+    return getDay(kidId, date);
+  }
+  function listRequests(kidId) {
+    need_();
+    return D.requests.filter(r => !kidId || r.kidId === kidId).slice().sort((a, b) => String(a.ts).localeCompare(String(b.ts)))
+      .map(r => Object.assign({}, r, { kidName: kidObj_(r.kidId).name || '', kidEmoji: kidObj_(r.kidId).emoji || '' }));
+  }
+  /** 부모: 승인 → 그 날짜에 체크 1번 추가하고 요청(사진)은 삭제 */
+  function approveRequest(id) {
+    need_();
+    if (role_() !== 'parent') throw new Error('부모님만 승인할 수 있어요.');
+    const q = D.requests.find(r => r.id === id && r.status === 'pending');
+    if (!q) throw new Error('이미 처리된 요청이에요.');
+    const item = D.items.find(i => i.id === q.itemId);
+    D.requests = D.requests.filter(r => r !== q);
+    if (item) {
+      const n = D.records.filter(matcher_(item, q.kidId, q.date)).length;
+      if (n < item.maxCount) D.records.push({ id: newId_('r'), date: q.date, kidId: q.kidId, itemId: item.id, itemName: item.name, amount: item.amount, ts: now_() });
+    }
+    return listRequests();
+  }
+  /** 부모: 반려 → 사진은 바로 지우고 이유만 남김 (아이가 확인하면 삭제) */
+  function rejectRequest(id, reason) {
+    need_();
+    if (role_() !== 'parent') throw new Error('부모님만 반려할 수 있어요.');
+    const q = D.requests.find(r => r.id === id && r.status === 'pending');
+    if (!q) throw new Error('이미 처리된 요청이에요.');
+    q.status = 'rejected'; q.photo = ''; q.reason = str_(reason).slice(0, 100); q.ts = now_();
+    return listRequests();
+  }
+  function dismissRequest(id) {
+    need_();
+    D.requests = D.requests.filter(r => !(r.id === id && r.status !== 'pending'));
+    return true;
+  }
+  /** 아이도 쓸 수 있음: 저축 목표 + 이번 달 '갖고 싶은 것' 소비 목표 */
+  function setKidGoals(kidId, g) {
+    need_();
+    const k = D.kids.find(x => x.id === kidId); if (!k) throw new Error('아이를 확인해 주세요.');
+    k.goalName = str_(g.goalName).slice(0, 30);
+    k.goalAmount = Math.max(0, Math.floor(num_(g.goalAmount)));
+    k.spendGoal = Math.max(0, Math.floor(num_(g.spendGoal)));
+    k.spendGoalMonth = k.spendGoal ? today_().slice(0, 7) : '';
+    return getInitData();
+  }
+
+  /* ===================== 💸 조부모 용돈 송금 정보 (가족 공유) ===================== */
+  function payInfo_() {
+    const m = D.meta.find(x => x.id === 'pay');
+    return m ? { kakao: m.kakao || '', bank: m.bank || '', account: m.account || '', holder: m.holder || '' } : { kakao: '', bank: '', account: '', holder: '' };
+  }
+  function setPay(p) {
+    need_();
+    if (role_() !== 'parent') throw new Error('부모님만 바꿀 수 있어요.');
+    const kakao = str_(p.kakao);
+    if (kakao && !/^https:\/\/qr\.kakaopay\.com\/[A-Za-z0-9]+\/?$/.test(kakao)) throw new Error('카카오페이 송금 링크는 https://qr.kakaopay.com/… 형식이에요.');
+    const account = str_(p.account).replace(/[^0-9-]/g, '');
+    const v = { id: 'pay', kakao: kakao, bank: str_(p.bank).slice(0, 20), account: account.slice(0, 30), holder: str_(p.holder).slice(0, 20) };
+    const i = D.meta.findIndex(x => x.id === 'pay');
+    if (i >= 0) D.meta[i] = v; else D.meta.push(v);
+    return getInitData();
+  }
+
 
   /** 용돈 계약서 — 서명은 이 휴대폰에만 저장 (그림이라 동기화하지 않음) */
   function getContract(kidId) {
@@ -639,7 +758,7 @@
   /* ===================== 가족 동기화용 변경 추적 ===================== */
   // 아이·항목·기록·지출을 한 건씩 비교해, 바뀐 것만 서버로 보내고 서버에서 온 것만 반영합니다.
 
-  const COLS = ['kids', 'items', 'records', 'spends'];
+  const COLS = ['kids', 'items', 'records', 'spends', 'requests', 'meta'];
   let FP = null; // { col: Map(id → 내용 문자열) }
 
   function stable_(o) { return JSON.stringify(o, Object.keys(o).sort()); }
@@ -686,11 +805,12 @@
   /* ===================== 호출 창구 ===================== */
 
   const API = {
-    accrueInterest, addCheer, setRole, getContract, saveContract, getAlbum,
+    accrueInterest, addCheer, setRole, setKidRole, exitKidRole, setKidConsent, submitRequest, listRequests,
+    approveRequest, rejectRequest, dismissRequest, setKidGoals, setPay, getContract, saveContract, getAlbum,
     getInitData, setupApp, loadDemo, getDay, setCount, addSpend, addBonus, deleteBonus, addTransfer, deleteSpend,
     getLedger, verifyPin, setPin, saveItem, deleteItem, saveKid, deleteKid, exportData, importData, resetAll
   };
-  const READ_ONLY = { getInitData: 1, getDay: 1, getLedger: 1, verifyPin: 1, exportData: 1, getContract: 1, getAlbum: 1 };
+  const READ_ONLY = { listRequests: 1, getInitData: 1, getDay: 1, getLedger: 1, verifyPin: 1, exportData: 1, getContract: 1, getAlbum: 1 };
 
   let queue = Promise.resolve();
   function enqueue_(job) {
@@ -728,7 +848,7 @@
     setSync: (sync, opts) => enqueue_(async () => {
       if (opts && opts.clear) {
         const pin = D && D.settings ? D.settings.pin : '';
-        D = { v: VERSION, settings: { pin: pin || '' }, kids: [], items: [], records: [], spends: [], createdAt: now_() };
+        D = { v: VERSION, settings: { pin: pin || '' }, kids: [], items: [], records: [], spends: [], requests: [], meta: [], createdAt: now_() };
       }
       if (!D) throw new Error('먼저 시작 설정을 해 주세요.');
       if (sync) D.sync = sync; else delete D.sync;
