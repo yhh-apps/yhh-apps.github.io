@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>우리집 용돈 통장</title>
-<meta name="description" content="부모가 자녀의 실천 용돈·지출·저축을 기록하는 경제교육 용돈 관리 앱">
+<title>용돈 받아라 - 생활습관·경제교육</title>
+<meta name="description" content="좋은 습관을 실천하면 용돈이 쌓여요. 벌고, 쓰고, 저축하며 배우는 우리 아이 생활습관·경제교육 앱">
 <meta name="theme-color" content="#FF9F43">
 <script>
   /* 카카오톡 안의 브라우저로 열리면 기록이 카톡 안에만 저장되고 앱 설치도 안 돼서, 크롬(기본 브라우저)으로 다시 열기 */
@@ -30,6 +30,7 @@
   body{margin:0;background:var(--bg);color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;font-size:15px}
   .wrap{max-width:560px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top)) 16px 96px}
+  .tagline{text-align:center;color:var(--sub);font-size:13px;margin:-8px 0 14px}
   h1{font-family:'Jua',sans-serif;font-weight:400;font-size:26px;margin:4px 0 12px;text-align:center}
   .jua{font-family:'Jua',sans-serif;font-weight:400}
   .kids{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}
@@ -136,7 +137,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>💰 우리집 용돈 통장</h1>
+  <h1>💰 용돈 받아라</h1>
+  <div class="tagline">생활습관 · 경제교육 — 습관이 쌓이면 용돈이 쌓여요</div>
   <div class="demobar hide" id="inappBar" style="background:#FFF0F0;color:#B23A48">⚠️ 앱 안의 브라우저로 열려 있어요. 오른쪽 위 메뉴에서 「다른 브라우저로 열기」(크롬)를 눌러 주세요. 그래야 기록이 안전하게 저장되고 앱을 설치할 수 있어요.</div>
   <div class="demobar hide" id="demoBar">👀 예시 자료로 둘러보는 중이에요. 마음껏 눌러 보세요!
     <button class="btn sm" onclick="askEndDemo()">내 아이로 시작하기</button></div>

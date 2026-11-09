@@ -1,4 +1,4 @@
-/* 우리집 용돈 통장 — 화면 (부모용). 데이터 호출은 store.js의 call() */
+/* 용돈 받아라 — 화면 (부모용). 데이터 호출은 store.js의 call() */
 'use strict';
 const S = { kids:[], items:[], kinds:[], methods:[], kidId:null, date:null, today:null, month:null, tab:'check', day:null, ledger:null, hasPin:false, locked:false };
 const WEEK = ['일','월','화','수','목','금','토'];
@@ -698,7 +698,7 @@ function doJoin(){
 function appUrl(){return location.origin+location.pathname.replace(/[^/]*$/,'')}
 function inviteMsg(){
   const code=Sync.shareCode(S.family);
-  return `[우리집 용돈 통장] 가족 초대 👨‍👩‍👧
+  return `[용돈 받아라] 가족 초대 👨‍👩‍👧
 우리 아이 용돈 통장을 함께 써요!
 
 ① 아래 링크를 눌러 앱을 열어 주세요
@@ -759,12 +759,12 @@ function doPin(off){
 /* ---------- 백업 ---------- */
 function doExport(){
   call('exportData').then(async text=>{
-    const name='용돈통장_백업_'+S.today+'.json';
+    const name='용돈받아라_백업_'+S.today+'.json';
     const blob=new Blob([text],{type:'application/json'});
     try{
       const file=new File([blob],name,{type:'application/json'});
       if(navigator.canShare&&navigator.canShare({files:[file]})){
-        await navigator.share({files:[file],title:'용돈 통장 백업'}); toast('백업 파일을 보냈어요'); return;
+        await navigator.share({files:[file],title:'용돈 받아라 백업'}); toast('백업 파일을 보냈어요'); return;
       }
     }catch(e){ if(e&&e.name==='AbortError') return; }
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
