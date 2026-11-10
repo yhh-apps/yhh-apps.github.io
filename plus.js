@@ -86,10 +86,12 @@ function kidPlusBadges(k){
   const b=[];
   if(Number(k.interestRate)>0) b.push(`<span class="badge">🏦 이자 월 ${k.interestRate}%</span>`);
   if(k.jars&&k.jars.on) b.push(`<span class="badge">🫙 ${k.jars.spend}/${k.jars.save}/${k.jars.give}</span>`);
-  return `<div style="margin-top:4px">${b.join('')}
-    <button class="btn sm ghost" style="margin-top:4px" onclick="openContract('${k.id}')">📜 계약서</button>
-    <button class="btn sm ghost" style="margin-top:4px" onclick="openAlbum('${k.id}')">🎖️ 앨범</button>
-    <button class="btn sm ghost" style="margin-top:4px" onclick="openKidAccess('${k.id}')">🧒 아이 화면</button></div>`;
+  // 줄 전체를 누르면 아이 수정 창이 열리므로, 바로가기 칩은 그 클릭이 위로 전달되지 않게 막음
+  return `${b.length?`<div style="margin-top:4px">${b.join('')}</div>`:''}
+    <div class="kchips">
+    <button class="kchip" onclick="event.stopPropagation();openContract('${k.id}')">📜 계약서</button>
+    <button class="kchip" onclick="event.stopPropagation();openAlbum('${k.id}')">🎖️ 앨범</button>
+    <button class="kchip" onclick="event.stopPropagation();openKidAccess('${k.id}')">🧒 아이 화면</button></div>`;
 }
 
 /* ---------- 📜 용돈 계약서 ---------- */

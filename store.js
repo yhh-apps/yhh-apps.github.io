@@ -661,6 +661,10 @@
       monthOut: sumType('out'), monthSaved: sumType('save'), monthFine: sumType('fine'), monthInterest: sumType('interest'),
       jars: plus_().active ? jars_(kidObj_(kidId), recs, spends) : null,
       interestRate: plus_().active ? num_(kidObj_(kidId).interestRate) : 0,
+      spendGoal: (() => { // 이번 달 '갖고 싶은 것' 소비 목표 (그 달을 볼 때만)
+        const k = kidObj_(kidId); if (!k.spendGoal || k.spendGoalMonth !== month) return null;
+        return { limit: k.spendGoal, used: sum_(spends.filter(s => s.date.slice(0, 7) === month && s.method !== TRANSFER && s.kind === KINDS[1])) };
+      })(),
       totalSaved: spends.filter(s => s.method === TRANSFER).reduce((s, x) => s + x.amount, 0),
       kindSum: kindSum, methodSum: methodSum,
       balance: bal,
