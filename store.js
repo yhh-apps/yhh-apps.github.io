@@ -117,8 +117,11 @@
     const cfg = window.PLUS_CONFIG || {};
     const promoEnd = cfg.promoEnd || null;               // 'yyyy-mm-dd' (없으면 출시 전이라 계속 체험)
     const promo = !promoEnd || today_() <= promoEnd;
-    const purchased = !!(D && D.settings.plusPurchased);
-    return { active: promo || purchased, promo: promo, promoEnd: promoEnd, purchased: purchased, price: cfg.price || '' };
+    // 구매: 가족 문서 meta/plus(결제 확인 서버만 씀 — 가족 모든 기기에 적용) 또는 이 기기 설정
+    const fp = D && D.familyPlus, famId = D && D.sync && D.sync.familyId;
+    const familyBought = !!(fp && fp.purchased && famId && fp.fid === famId);
+    const purchased = familyBought || !!(D && D.settings.plusPurchased);
+    return { active: promo || purchased, promo: promo, promoEnd: promoEnd, purchased: purchased, family: familyBought, price: cfg.price || '' };
   }
   function needPlus_() { if (!plus_().active) throw new Error('플러스 기능이에요. 「아이·항목」 탭의 용돈 받아라 플러스에서 시작해 주세요.'); }
 
@@ -741,7 +744,7 @@
 
   function exportData() {
     need_();
-    const copy = Object.assign({}, D); delete copy.sync;
+    const copy = Object.assign({}, D); delete copy.sync; delete copy.familyPlus;
     return JSON.stringify({ app: 'allowance', exportedAt: now_(), data: copy }, null, 1);
   }
 
@@ -752,7 +755,7 @@
     const d = obj && obj.app === 'allowance' ? obj.data : null;
     if (!d || !Array.isArray(d.kids) || !Array.isArray(d.records)) throw new Error('이 앱의 백업 파일이 아니에요.');
     migrate_(d);
-    delete d.sync;
+    delete d.sync; delete d.familyPlus;
     D = d;
     return getInitData();
   }
@@ -767,6 +770,7 @@
   // 아이·항목·기록·지출을 한 건씩 비교해, 바뀐 것만 서버로 보내고 서버에서 온 것만 반영합니다.
 
   const COLS = ['kids', 'items', 'records', 'spends', 'requests', 'meta'];
+  const PLUS_DOC = 'plus'; // families/{가족}/meta/plus — 플러스 구매 기록 (결제 확인 서버만 쓰고, 앱은 읽기만)
   let FP = null; // { col: Map(id → 내용 문자열) }
 
   function stable_(o) { return JSON.stringify(o, Object.keys(o).sort()); }
@@ -795,6 +799,12 @@
     if (!FP) buildFP_();
     let changed = 0;
     docs.forEach(d => {
+      if (col === 'meta' && d.id === PLUS_DOC) { // 가족 구매 정보: D.meta에 넣지 않음 → 이 기기에서 다시 올리지 않음
+        const p = d.data || {};
+        const next = p.del || !p.purchased ? null : { fid: D.sync.familyId, purchased: true, productId: str_(p.productId), at: p.at && p.at.toMillis ? p.at.toMillis() : (p.at || null) };
+        if (stable_(D.familyPlus || {}) !== stable_(next || {})) { if (next) D.familyPlus = next; else delete D.familyPlus; changed++; }
+        return;
+      }
       const e = Object.assign({}, d.data); const isDel = !!e.del; delete e.u; delete e.del; e.id = d.id;
       const arr = D[col], i = arr.findIndex(x => x.id === d.id);
       if (isDel) {
@@ -876,7 +886,7 @@
       return n;
     }),
     /** 가족 연결만 끊고 기록은 이 기기에 남김 */
-    detach: () => enqueue_(async () => { if (D) { delete D.sync; FP = null; await persist(); } }),
+    detach: () => enqueue_(async () => { if (D) { delete D.sync; delete D.familyPlus; FP = null; await persist(); } }),
     /** 가족 데이터 삭제 후 이 기기도 비우기 */
     wipe: () => enqueue_(async () => { D = null; FP = null; await clearStore(); })
   };

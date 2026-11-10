@@ -6,7 +6,7 @@
 function plusTag(){return '<span class="plustag">⭐ 플러스</span>'}
 function promoText(){
   const p=S.plus||{};
-  if(p.purchased) return '✅ 플러스 평생 이용권을 쓰고 있어요';
+  if(p.purchased) return p.family?'✅ 우리 가족 모두 플러스 평생 이용권을 쓰고 있어요':'✅ 플러스 평생 이용권을 쓰고 있어요';
   if(p.promo) return '🎉 출시 기념 무료 체험 중'+(p.promoEnd?` (${Number(p.promoEnd.slice(5,7))}월 ${Number(p.promoEnd.slice(8))}일까지)`:'');
   return '체험 기간이 끝났어요 · 평생 이용권 '+(p.price||'');
 }
