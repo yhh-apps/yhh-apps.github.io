@@ -99,7 +99,7 @@ function statusHtml(){
 function applyInit(d){
   S.kids=d.kids;S.items=d.items;S.kinds=d.kinds;S.methods=d.methods;S.hasPin=d.hasPin;S.demo=!!d.demo;S.family=d.family||null;
   S.plus=d.plus||{active:false};S.role=d.role||'parent';S.gpName=d.gpName||'';
-  const prevPend=S.pendingCount||0; S.pendingCount=d.pendingCount||0; S.pay=d.pay||null; S.kidRole=d.kidRole||null;
+  const prevPend=S.pendingCount||0; S.pendingCount=d.pendingCount||0; S.pay=d.pay||null; S.kidRole=d.kidRole||null; S.account=d.account||'';
   if(S.role==='parent'&&S.pendingCount>prevPend&&S.kids.length&&prevPend>=0&&S.started) toast('📸 아이가 실천 인증을 보냈어요!');
   if(S.kidRole) S.kidId=S.kidRole.kidId;
   setTabLabels();
@@ -144,6 +144,7 @@ function renderSetup(){
     <input id="joinCode" class="codein" placeholder="ABCD-EFGH" maxlength="9" autocomplete="off" style="margin-top:10px">
     <button class="btn full" style="background:var(--green)" id="joinBtn" onclick="doJoin()">가족 코드로 참여하기</button>
   </div>`:''}
+  ${restoreCardHtml()}
   <div class="card">
     <div class="jua" style="font-size:18px">👀 어떻게 쓰는지 먼저 볼까요?</div>
     <div class="muted" style="margin-top:4px">예시 아이 2명의 4주치 기록(실천·벌금·보너스·지출·저축)으로 둘러볼 수 있어요. 언제든 내 아이로 새로 시작할 수 있어요.</div>
@@ -634,6 +635,7 @@ function renderManage(){
       <button class="btn sm ghost" onclick="editKid('${k.id}')">수정</button>
       <button class="btn sm ghost" onclick="askDelKid('${k.id}')">삭제</button></div>`).join('')+`</div>`;
   h+=familyCardHtml();
+  h+=accountCardHtml();
   h+=payCardHtml();
   h+=`<div class="card"><div class="jua" style="font-size:18px">🔒 앱 잠금</div>
       <div class="muted" style="margin-top:4px">${S.hasPin?'앱을 열 때 비밀번호를 물어봐요. (5분 넘게 나갔다 오면 다시 잠겨요)':'지금은 잠금이 꺼져 있어요. 아이가 마음대로 고치지 못하게 하려면 비밀번호를 정해 주세요.'}</div>

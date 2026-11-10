@@ -1,6 +1,7 @@
 /**
  * 가족 동기화 — Firebase(익명 로그인 + Firestore)
  * 서버 구조: families/{가족코드}  { members: [uid…], createdAt }
+ *            users/{uid}  { familyId } — Google 계정을 연결한 부모만 (새 휴대폰에서 가족 되찾기용)
  *            families/{가족코드}/{kids|items|records|spends}/{id}  { ...내용, u: 서버시각, del?: true }
  * - 각 휴대폰은 자기 기기 저장소를 그대로 쓰고, 바뀐 건만 주고받습니다.
  * - 지운 것은 del:true 표시로 남겨 다른 휴대폰도 지우게 합니다.
@@ -21,7 +22,8 @@
     code: () => familyId,
     onStatus: null,      // (status) => void
     onFamilyGone: null,  // () => void — 다른 부모가 가족 데이터를 지웠을 때
-    create, join, resume, leave, destroyFamily, shareCode: formatCode
+    create, join, resume, leave, destroyFamily, shareCode: formatCode,
+    linkGoogle, switchToGoogle, restoreWithGoogle, unlinkGoogle
   };
 
   function setStatus(s) { if (status !== s) { status = s; if (Sync.onStatus) Sync.onStatus(s); } }
@@ -160,6 +162,7 @@
     const sync = { familyId: code, last: {}, joinedAt: Date.now() };
     await Store.setSync(sync);
     listen(sync);
+    await syncUserDoc(code);
     return formatCode(code);
   }
 
@@ -183,6 +186,7 @@
     await Store.setSync(sync, { clear: true });
     const first = listen(sync);
     await Promise.race([first, new Promise(r => setTimeout(r, 20000))]);
+    await syncUserDoc(code);
     return formatCode(code);
   }
 
@@ -202,10 +206,109 @@
     const snap = await Store.snapshot();
     if (!snap || !snap.sync) return;
     const code = snap.sync.familyId;
-    try { await ready(); stop(); await famRef(code).update({ members: fb.firestore.FieldValue.arrayRemove(uid) }); }
+    try { await ready(); stop(); await syncUserDoc(null); await famRef(code).update({ members: fb.firestore.FieldValue.arrayRemove(uid) }); }
     catch (e) { /* 서버에 못 알려도 이 기기는 연결을 끊음 */ }
     stop(); familyId = null; setStatus('off');
     await Store.detach();
+  }
+
+  /* ---------- 🔐 Google 계정 (부모가 선택해서 연결) ----------
+     서버: users/{uid} = { familyId } — 새 휴대폰에서 Google로 로그인하면 이걸 보고 가족을 되찾음 */
+  const userRef = () => db.collection('users').doc(uid);
+  function googleOf(u) { const p = (u && u.providerData || []).find(x => x.providerId === 'google.com'); return p ? (p.email || u.email || '') : ''; }
+  function provider() { const p = new fb.auth.GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' }); return p; }
+  function authFriendly(e) {
+    const c = e && e.code || '';
+    if (c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request' || c === 'auth/user-cancelled') return new Error('로그인을 취소했어요.');
+    if (c === 'auth/popup-blocked') return new Error('로그인 창이 막혔어요. 다시 한 번 눌러 주세요.');
+    if (c === 'auth/unauthorized-domain' || c === 'auth/operation-not-allowed') return new Error('Google 로그인 서버 설정이 아직 끝나지 않았어요.');
+    if (c === 'auth/network-request-failed') return new Error('인터넷 연결을 확인해 주세요.');
+    return friendly(e);
+  }
+  async function saveUserFamily(fid) {
+    try {
+      if (fid) await userRef().set({ familyId: fid, updatedAt: fb.firestore.FieldValue.serverTimestamp() });
+      else await userRef().delete();
+    } catch (e) { console.warn('user doc', e); }
+  }
+  /** Google 계정이 연결돼 있으면 가족 코드를 계정에 기록 */
+  async function syncUserDoc(fid) { if (fb && googleOf(fb.auth().currentUser)) await saveUserFamily(fid); }
+
+  /** 지금 휴대폰에 Google 계정 연결 — 번호표(uid)가 그대로라 가족 연결도 그대로 */
+  async function linkGoogle() {
+    await ready();
+    const user = fb.auth().currentUser;
+    if (!googleOf(user)) {
+      try { await user.linkWithPopup(provider()); }
+      catch (e) {
+        if (e.code === 'auth/credential-already-in-use' || e.code === 'auth/email-already-in-use') {
+          return { conflict: true, credential: e.credential, email: (e.customData && e.customData.email) || e.email || '' };
+        }
+        throw authFriendly(e);
+      }
+    }
+    await saveUserFamily(familyId);
+    return { email: googleOf(fb.auth().currentUser) };
+  }
+
+  /** 로그인한 계정에 맞춰 가족 연결 (계정에 가족이 있으면 그 가족으로, 없으면 이 휴대폰의 가족을 계정에 기록) */
+  async function afterGoogleSignIn(prevFamily) {
+    const doc = await userRef().get();
+    const fid = doc.exists ? doc.data().familyId : null;
+    if (fid) {
+      const fam = await famRef(fid).get().catch(() => null);
+      if (fam && fam.exists && (fam.data().members || []).indexOf(uid) >= 0) {
+        stop(); familyId = null;
+        const sync = { familyId: fid, last: {}, joinedAt: Date.now() };
+        await Store.setSync(sync, { clear: true });
+        const first = listen(sync);
+        await Promise.race([first, new Promise(r => setTimeout(r, 20000))]);
+        return { email: googleOf(fb.auth().currentUser), familyId: fid, restored: true };
+      }
+      await saveUserFamily(null); // 가족이 지워졌거나 빠진 경우
+    }
+    if (prevFamily) { // 이 휴대폰이 쓰던 가족에 Google 번호표로 다시 참여
+      await famRef(prevFamily).update({ members: fb.firestore.FieldValue.arrayUnion(uid) });
+      await saveUserFamily(prevFamily);
+      const snap = await Store.snapshot();
+      listen({ familyId: prevFamily, last: (snap && snap.sync && snap.sync.last) || {} });
+      return { email: googleOf(fb.auth().currentUser), familyId: prevFamily };
+    }
+    return { email: googleOf(fb.auth().currentUser), familyId: null };
+  }
+
+  /** 이미 다른 휴대폰에서 쓰던 Google 계정으로 바꾸기 (연결 시 「이미 사용 중」이었을 때) */
+  async function switchToGoogle(credential) {
+    await ready();
+    const prev = familyId;
+    if (prev) { try { await famRef(prev).update({ members: fb.firestore.FieldValue.arrayRemove(uid) }); } catch (e) { } }
+    stop();
+    try { uid = (await fb.auth().signInWithCredential(credential)).user.uid; }
+    catch (e) { if (prev) listen((await Store.snapshot()).sync); throw authFriendly(e); }
+    return afterGoogleSignIn(prev);
+  }
+
+  /** 새 휴대폰: Google로 로그인해서 가족 기록 되찾기 */
+  async function restoreWithGoogle() {
+    await ready();
+    try { uid = (await fb.auth().signInWithPopup(provider())).user.uid; }
+    catch (e) { throw authFriendly(e); }
+    const doc = await userRef().get();
+    if (!doc.exists || !doc.data().familyId) {
+      throw new Error('이 Google 계정에 연결된 가족 기록이 없어요. 쓰던 휴대폰에서 「설정 → Google 계정 연결」을 먼저 해 주세요.');
+    }
+    const r = await afterGoogleSignIn(null);
+    if (!r.restored) throw new Error('가족 기록을 찾지 못했어요. 가족 데이터가 삭제되었을 수 있어요.');
+    return r;
+  }
+
+  /** Google 연결 끊기 — 계정에 남긴 가족 기록 표시를 지우고 Google 연결 해제 (이 휴대폰의 가족 연결은 유지) */
+  async function unlinkGoogle() {
+    await ready();
+    const u = fb.auth().currentUser;
+    if (!googleOf(u)) return;
+    await saveUserFamily(null);
+    try { await u.unlink('google.com'); } catch (e) { throw authFriendly(e); }
   }
 
   /** 서버의 가족 데이터 전부 삭제 + 이 휴대폰도 비우기 */
@@ -223,6 +326,7 @@
         }
       }
       await famRef(code).delete();
+      await syncUserDoc(null);
     } catch (e) { listen(snap.sync); throw friendly(e); }
     familyId = null; setStatus('off');
     await Store.wipe();

@@ -285,6 +285,7 @@
       kidRole: D && D.settings.role === 'kid' ? { kidId: D.settings.kidId, fromParent: !!D.settings.kidFromParent } : null,
       pendingCount: D ? D.requests.filter(r => r.status === 'pending').length : 0,
       pay: D ? payInfo_() : null,
+      account: D ? str_(D.settings.account) : '', // 연결된 Google 계정 이메일 (이 기기 표시용)
       gpName: D ? str_(D.settings.gpName) : ''
     };
   }
@@ -501,6 +502,13 @@
     k.goalAmount = Math.max(0, Math.floor(num_(g.goalAmount)));
     k.spendGoal = Math.max(0, Math.floor(num_(g.spendGoal)));
     k.spendGoalMonth = k.spendGoal ? today_().slice(0, 7) : '';
+    return getInitData();
+  }
+
+  /** 🔐 이 기기에 연결된 Google 계정 이메일 (화면 표시용, 기기에만 저장) */
+  function setAccount(email) {
+    need_();
+    D.settings.account = str_(email).slice(0, 100);
     return getInitData();
   }
 
@@ -806,7 +814,7 @@
 
   const API = {
     accrueInterest, addCheer, setRole, setKidRole, exitKidRole, setKidConsent, submitRequest, listRequests,
-    approveRequest, rejectRequest, dismissRequest, setKidGoals, setPay, getContract, saveContract, getAlbum,
+    approveRequest, rejectRequest, dismissRequest, setKidGoals, setPay, setAccount, getContract, saveContract, getAlbum,
     getInitData, setupApp, loadDemo, getDay, setCount, addSpend, addBonus, deleteBonus, addTransfer, deleteSpend,
     getLedger, verifyPin, setPin, saveItem, deleteItem, saveKid, deleteKid, exportData, importData, resetAll
   };
