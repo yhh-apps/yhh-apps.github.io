@@ -6,9 +6,9 @@
 function plusTag(){return '<span class="plustag">⭐ 플러스</span>'}
 function promoText(){
   const p=S.plus||{};
-  if(p.purchased) return p.family?'✅ 우리 가족 모두 플러스 평생 이용권을 쓰고 있어요':'✅ 플러스 평생 이용권을 쓰고 있어요';
+  if(p.purchased) return p.family?'✅ 우리 가족 모두 플러스를 쓰고 있어요 (구매 완료)':'✅ 플러스 구매 완료 · 추가 결제 없이 계속 써요';
   if(p.promo) return '🎉 출시 기념 무료 체험 중'+(p.promoEnd?` (${Number(p.promoEnd.slice(5,7))}월 ${Number(p.promoEnd.slice(8))}일까지)`:'');
-  return '체험 기간이 끝났어요 · 평생 이용권 '+(p.price||'');
+  return '체험 기간이 끝났어요 · 한 번 구매 '+(p.price||'');
 }
 /** 플러스가 아니면 소개 화면을 띄우고 false */
 function requirePlus(){ if(S.plus&&S.plus.active) return true; openPlusPage(); return false; }
@@ -38,7 +38,7 @@ function openPlusPage(){
     ${PLUS_FEATURES.map(f=>`<div class="pfeat"><div class="pico">${f[0]}</div><div><b>${f[1]}</b><div class="muted">${f[2]}</div></div></div>`).join('')}
     <div class="promo big">${promoText()}</div>
     ${p.purchased?'':p.promo
-      ?`<div class="muted center" style="margin-top:6px">체험 기간에는 모든 플러스 기능을 무료로 쓸 수 있어요.${p.price?` 체험이 끝나면 평생 이용권(${esc(p.price)}, 한 번 결제)으로 계속 쓸 수 있어요.`:''}</div>`
+      ?`<div class="muted center" style="margin-top:6px">체험 기간에는 모든 플러스 기능을 무료로 쓸 수 있어요.${p.price?` 체험이 끝나면 한 번 구매(${esc(p.price)})로 추가 결제 없이 계속 쓸 수 있어요.`:''}</div>`
       :`<button class="btn full" style="background:#7C5CE0" onclick="buyPlus()">플러스 시작하기 · ${esc(p.price||'')}</button>
         <div class="muted center" style="margin-top:6px">한 번 결제로 계속 써요. 가족이 함께 쓰는 휴대폰에도 적용돼요.</div>`}
     <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
