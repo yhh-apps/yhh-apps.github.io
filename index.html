@@ -95,6 +95,13 @@
   .line:last-child{border-bottom:0}
   .line .l{min-width:0;flex:1}
   .line .names{color:var(--sub);font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .weekhead{font-family:'Jua',sans-serif;font-size:15px;color:var(--main-d);margin:8px 2px 2px}
+  .weekpage{min-height:120px}
+  .pager{display:flex;align-items:center;justify-content:center;gap:4px;margin-top:10px;flex-wrap:wrap}
+  .pg{border:1px solid var(--line);background:#fff;border-radius:99px;min-width:34px;height:34px;padding:0 10px;font-size:13px;color:var(--ink);cursor:pointer;font-family:inherit}
+  .pg:disabled{opacity:.3}
+  .pg.num.empty{color:#C9BBAE}
+  .pg.num.on{background:var(--main);border-color:var(--main);color:#fff;font-weight:700}
   .in{color:var(--green);font-weight:700}
   .out{color:var(--red);font-weight:700}
   .r{text-align:right;white-space:nowrap}

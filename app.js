@@ -550,9 +550,82 @@ function renderLedger(L){
     h+=`<div class="card"><div class="jua" style="font-size:18px;margin-bottom:6px">🏅 이번 달 많이 실천한 것</div>`+
       L.stats.slice(0,5).map((s,i)=>`<div class="est"><span>${['🥇','🥈','🥉','④','⑤'][i]} ${esc(s.name)}</span><span class="muted r">${s.count}번 · ${won(s.amount)}</span></div>`).join('')+`</div>`;
   }
-  h+=`<div class="card"><div class="jua" style="font-size:18px">📒 ${esc(k.name)}의 통장 내역</div>`;
-  if(!L.lines.length) h+='<div class="muted" style="padding:14px 0">이 달의 거래가 없어요.</div>';
-  h+=L.lines.map(l=>{
+  h+=`<div class="card"><div class="jua" style="font-size:18px">📒 ${esc(k.name)}의 통장 내역</div>
+    <div id="histBox">${historyHtml(L)}</div>`;
+  const mm=Number(L.month.slice(5));
+  h+=`</div>
+    ${plusShortcutsHtml()}
+    <div class="sharecard ${viewOnly()?'hide':''}">
+      <div class="jua" style="font-size:18px">💬 ${mm}월 통장을 ${esc(k.name)}에게 보내 볼까요?</div>
+      <div class="muted" style="margin-top:4px">번 돈, 쓴 돈, 저축, 많이 실천한 것을 정리해서 카톡·문자로 보낼 수 있어요. 보내기 전에 내용을 보고 한마디 덧붙일 수 있어요.</div>
+      <button class="btn full" style="background:var(--green)" onclick="shareMonth()">${mm}월 통장 보내기</button>
+    </div>
+    <div class="tip">💡 아이와 통장 보며 이야기 나누기: "이번 달 산 것 중 꼭 필요했던 건 뭐였니?", "얼마를 진짜 통장에 저축해 둘까?"</div>`;
+  $('view').innerHTML=h;
+  bindWeekSwipe();
+}
+
+/* 통장 내역: 한 주(월~일)씩 나눠 보여 주고, 아래 번호를 누르거나 옆으로 밀어서 넘김.
+   6개월 넘게 지난 달은 은행 통장처럼 한 줄로 압축(「펼쳐 보기」로 다시 볼 수 있음) */
+const COMPRESS_AFTER_MONTHS=6;
+function ledgerWeeks(L){
+  const first=L.month+'-01', last=addDays(addMonth(L.month,1)+'-01',-1);
+  const dow=s=>(parse(s).getUTCDay()+6)%7; // 월=0 … 일=6
+  const weeks=[];
+  for(let s=addDays(first,-dow(first)); s<=last; s=addDays(s,7)){
+    const a=s<first?first:s, e=addDays(s,6), b=e>last?last:e;
+    weeks.push({from:a,to:b});
+  }
+  // 달 처음·끝에 하루이틀만 걸친 주는 옆 주에 붙임 (예: 1일이 일요일이면 1~8일을 1주로)
+  const days=w=>(parse(w.to)-parse(w.from))/864e5+1;
+  if(weeks.length>1&&days(weeks[0])<3){weeks[1].from=weeks[0].from;weeks.shift()}
+  if(weeks.length>1&&days(weeks[weeks.length-1])<3){weeks[weeks.length-2].to=weeks[weeks.length-1].to;weeks.pop()}
+  weeks.forEach(w=>{w.lines=L.lines.filter(l=>l.date>=w.from&&l.date<=w.to)});
+  return weeks;
+}
+function monthsAgo(m){const a=S.today.slice(0,7).split('-').map(Number), b=m.split('-').map(Number);return (a[0]-b[0])*12+(a[1]-b[1])}
+function historyHtml(L){
+  if(!L.lines.length) return '<div class="muted" style="padding:14px 0">이 달의 거래가 없어요.</div>';
+  const key=S.kidId+'|'+L.month;
+  if(S.histKey!==key){ // 달이나 아이가 바뀌면: 이번 달이면 오늘이 있는 주, 지난 달이면 마지막 주부터
+    S.histKey=key; S.histOpen=false;
+    const ws=ledgerWeeks(L), t=S.today;
+    let i=ws.findIndex(w=>t>=w.from&&t<=w.to); if(i<0) i=ws.length-1;
+    S.histWeek=i;
+  }
+  if(monthsAgo(L.month)>=COMPRESS_AFTER_MONTHS&&!S.histOpen){
+    const inSum=L.monthIn+L.monthBonus+(L.monthInterest||0), outSum=L.monthOut+L.monthSaved+L.monthFine;
+    const end=L.lines[0].balance; // 내역은 최신순이라 맨 앞이 그달 마지막 잔액
+    return `<div class="line"><div class="l"><div><b>${Number(L.month.slice(5))}월</b> 📦 압축 기록</div>
+        <div class="names">거래 ${L.lines.length}건을 한 줄로 모았어요</div></div>
+      <div class="r"><div class="in">+${won(inSum)}</div><div class="out">-${won(outSum)}</div><div class="muted">잔액 ${won(end)}</div></div></div>
+      <button class="btn full ghost" onclick="S.histOpen=true;$('histBox').innerHTML=historyHtml(S.ledger);bindWeekSwipe()">펼쳐 보기</button>`;
+  }
+  const ws=ledgerWeeks(L), w=ws[S.histWeek]||ws[ws.length-1];
+  const range=w.from===w.to?prettyDate(w.from):prettyDate(w.from)+' ~ '+prettyDate(w.to).replace(/^\d+월 /,'');
+  return `<div class="weekhead">${range}</div>
+    <div id="weekPage" class="weekpage">${w.lines.length?w.lines.map(l=>lineHtml(l,L)).join(''):'<div class="muted" style="padding:14px 0;text-align:center">이 주에는 거래가 없어요</div>'}</div>
+    <div class="pager">
+      <button class="pg" onclick="goWeek(${S.histWeek-1})" ${S.histWeek<=0?'disabled':''} aria-label="이전 주">‹</button>
+      ${ws.map((x,i)=>`<button class="pg num ${i===S.histWeek?'on':''} ${x.lines.length?'':'empty'}" onclick="goWeek(${i})">${i+1}주</button>`).join('')}
+      <button class="pg" onclick="goWeek(${S.histWeek+1})" ${S.histWeek>=ws.length-1?'disabled':''} aria-label="다음 주">›</button>
+    </div>`;
+}
+function goWeek(i){
+  const n=ledgerWeeks(S.ledger).length; if(i<0||i>=n) return;
+  S.histWeek=i; $('histBox').innerHTML=historyHtml(S.ledger); bindWeekSwipe();
+}
+function bindWeekSwipe(){
+  const el=$('weekPage'); if(!el) return;
+  let x0=null,y0=null;
+  el.addEventListener('touchstart',e=>{x0=e.touches[0].clientX;y0=e.touches[0].clientY},{passive:true});
+  el.addEventListener('touchend',e=>{
+    if(x0===null) return;
+    const dx=e.changedTouches[0].clientX-x0, dy=e.changedTouches[0].clientY-y0; x0=null;
+    if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5) goWeek(S.histWeek+(dx<0?1:-1)); // 왼쪽으로 밀면 다음 주
+  });
+}
+function lineHtml(l,L){
     let left, amt;
     if(l.type==='in'){
       left=`<div><b>${shortDate(l.date)}</b> 실천 ${l.count}번 적립</div><div class="names">${esc(l.detail)}</div>`;
@@ -578,17 +651,6 @@ function renderLedger(L){
       amt=`<div class="out">-${won(l.amount)}</div>`;
     }
     return `<div class="line"><div class="l">${left}</div><div class="r">${amt}<div class="muted">잔액 ${won(l.balance)}</div></div></div>`;
-  }).join('');
-  const mm=Number(L.month.slice(5));
-  h+=`</div>
-    ${plusShortcutsHtml()}
-    <div class="sharecard ${viewOnly()?'hide':''}">
-      <div class="jua" style="font-size:18px">💬 ${mm}월 통장을 ${esc(k.name)}에게 보내 볼까요?</div>
-      <div class="muted" style="margin-top:4px">번 돈, 쓴 돈, 저축, 많이 실천한 것을 정리해서 카톡·문자로 보낼 수 있어요. 보내기 전에 내용을 보고 한마디 덧붙일 수 있어요.</div>
-      <button class="btn full" style="background:var(--green)" onclick="shareMonth()">${mm}월 통장 보내기</button>
-    </div>
-    <div class="tip">💡 아이와 통장 보며 이야기 나누기: "이번 달 산 것 중 꼭 필요했던 건 뭐였니?", "얼마를 진짜 통장에 저축해 둘까?"</div>`;
-  $('view').innerHTML=h;
 }
 
 /* ---------- 실물 통장 이체 ---------- */
