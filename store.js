@@ -123,6 +123,19 @@
     const purchased = familyBought || !!(D && D.settings.plusPurchased);
     return { active: promo || purchased, promo: promo, promoEnd: promoEnd, purchased: purchased, family: familyBought, price: cfg.price || '' };
   }
+  /** 그날 플러스를 쓸 수 있었는지 (이자: 쉬는 동안의 달은 건너뜀) — 체험 기간이었거나, 그날까지 산 경우 */
+  function plusActiveOn_(date) {
+    const promoEnd = (window.PLUS_CONFIG || {}).promoEnd || null;
+    if (!promoEnd || date <= promoEnd) return true;
+    if (D && D.settings.plusPurchased) return true; // 이 기기 구매(구매 시각 모름)
+    const fp = D && D.familyPlus, famId = D && D.sync && D.sync.familyId;
+    if (fp && fp.purchased && famId && fp.fid === famId) {
+      if (!fp.at) return true;
+      const t = new Date(Number(fp.at) + 9 * 3600 * 1000).toISOString().slice(0, 10); // 한국 날짜
+      return t <= date;
+    }
+    return false;
+  }
   function needPlus_() { if (!plus_().active) throw new Error('플러스 기능이에요. 「아이·항목」 탭의 용돈 받아라 플러스에서 시작해 주세요.'); }
 
   /** 세 개의 통장 잔액 — 들어온 돈(실천·보너스)을 비율대로 나누고, 이자는 저축 통장, 쓴 돈은 고른 통장에서 뺌 */
@@ -158,6 +171,7 @@
       for (let m = kid.interestFrom; m < cur; m = nextMonth_(m)) {
         const id = 'int_' + kid.id + '_' + m;
         if (D.records.some(r => r.id === id)) continue;
+        if (!plusActiveOn_(monthEnd_(m))) continue; // 플러스를 쉬던 달은 이자 없음 (다시 사도 밀린 이자가 한꺼번에 붙지 않게)
         const base = interestBase_(kid, monthEnd_(m));
         const amount = Math.floor(base * rate / 100);
         if (amount <= 0) continue;
@@ -534,8 +548,8 @@
 
 
   /** 용돈 계약서 — 서명은 이 휴대폰에만 저장 (그림이라 동기화하지 않음) */
-  function getContract(kidId) {
-    need_(); needPlus_();
+  function getContract(kidId) { // 보기는 플러스가 끝나도 가능 (이미 서명한 계약서), 저장만 플러스
+    need_();
     return (D.contracts || {})[kidId] || null;
   }
   function saveContract(kidId, c) {

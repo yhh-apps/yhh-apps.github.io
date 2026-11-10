@@ -94,18 +94,35 @@ function kidPlusBadges(k){
 
 /* ---------- 📜 용돈 계약서 ---------- */
 let pads={};
+function contractParts(kidId){
+  const k=S.kids.find(x=>x.id===kidId)||kid();
+  const its=S.items.filter(i=>i.active&&(i.target==='ALL'||i.target===kidId));
+  const good=its.filter(i=>i.amount>0), bad=its.filter(i=>i.amount<0);
+  const rules=[];
+  rules.push('용돈을 쓰면 무엇을 샀는지, 꼭 필요한 것인지 갖고 싶은 것인지 함께 기록해요.');
+  if(k.jars&&k.jars.on) rules.push(`들어온 용돈은 쓰기 ${k.jars.spend}% · 저축 ${k.jars.save}% · 나눔 ${k.jars.give}%로 나눠요.`);
+  if(Number(k.interestRate)>0) rules.push(`엄마·아빠 은행에 모아 둔 돈에는 매달 ${k.interestRate}%의 이자를 줘요.`);
+  if(k.goalName) rules.push(`저축 목표: ${k.goalName}${k.goalAmount?' ('+won(k.goalAmount)+')':''}`);
+  return {kidId:kidId,k:k,good:good,bad:bad,rules:rules};
+}
 function openContract(kidId){
-  if(!requirePlus()) return;
+  if(!(S.plus&&S.plus.active)){
+    // 플러스가 끝나도 이미 서명한 계약서는 보고 인쇄할 수 있음 (새로 쓰거나 고치기만 플러스)
+    call('getContract',kidId).then(c=>{
+      if(!c) return openPlusPage();
+      const x=S.contract=contractParts(kidId); S.contract.saved=c;
+      openModal(`<h3>📜 ${esc(x.k.name)}의 용돈 계약서</h3>
+        <div class="contract" id="contractBody">${contractHtml(x.k,x.good,x.bad,x.rules,c,false)}</div>
+        <div class="muted" style="margin-top:6px">계약서를 고치거나 새로 쓰려면 ⭐ 플러스가 필요해요.</div>
+        <button class="btn full ghost" onclick="printSavedContract()">🖨️ 인쇄 · PDF로 저장</button>
+        <button class="btn full ghost" onclick="closeModal();openPlusPage()">⭐ 플러스 알아보기</button>
+        <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
+    }).catch(e=>toast(errMsg(e)));
+    return;
+  }
   call('getContract',kidId).then(c=>{
-    const k=S.kids.find(x=>x.id===kidId)||kid(); c=c||{};
-    const its=S.items.filter(i=>i.active&&(i.target==='ALL'||i.target===kidId));
-    const good=its.filter(i=>i.amount>0), bad=its.filter(i=>i.amount<0);
-    const rules=[];
-    rules.push('용돈을 쓰면 무엇을 샀는지, 꼭 필요한 것인지 갖고 싶은 것인지 함께 기록해요.');
-    if(k.jars&&k.jars.on) rules.push(`들어온 용돈은 쓰기 ${k.jars.spend}% · 저축 ${k.jars.save}% · 나눔 ${k.jars.give}%로 나눠요.`);
-    if(Number(k.interestRate)>0) rules.push(`엄마·아빠 은행에 모아 둔 돈에는 매달 ${k.interestRate}%의 이자를 줘요.`);
-    if(k.goalName) rules.push(`저축 목표: ${k.goalName}${k.goalAmount?' ('+won(k.goalAmount)+')':''}`);
-    S.contract={kidId:kidId,k:k,good:good,bad:bad,rules:rules};
+    c=c||{};
+    const x=S.contract=contractParts(kidId), k=x.k, good=x.good, bad=x.bad, rules=x.rules;
     openModal(`<h3>📜 ${esc(k.name)}의 용돈 계약서</h3>
       <div class="contract" id="contractBody">${contractHtml(k,good,bad,rules,c,true)}</div>
       <label class="f">💰 용돈 정산일</label><input id="cPay" value="${esc(c.payday||'매주 일요일 저녁')}" placeholder="예: 매주 일요일 저녁">
@@ -155,6 +172,10 @@ function printContract(){
     const x=S.contract;
     printHtml(`<div class="contract print">${contractHtml(x.k,x.good,x.bad,x.rules,c,false)}</div>`);
   }).catch(()=>{});
+}
+function printSavedContract(){
+  const x=S.contract;
+  printHtml(`<div class="contract print">${contractHtml(x.k,x.good,x.bad,x.rules,x.saved,false)}</div>`);
 }
 function printHtml(html){
   $('printArea').innerHTML=html;
