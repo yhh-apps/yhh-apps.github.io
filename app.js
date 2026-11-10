@@ -856,7 +856,31 @@ ${appUrl()}?join=${S.family}
 }
 function shareFamilyCode(){previewShare(inviteMsg(),'가족 초대 보내기',true)}
 function askLeaveFamily(){
+  openModal(`<h3>이 휴대폰 연결 끊기</h3><div class="loading">가족 휴대폰 수를 확인하는 중…</div>`);
+  Sync.memberCount().then(n=>{
+    if(n<=1) return askLeaveLast();
+    askLeaveNormal(n);
+  }).catch(e=>{
+    openModal(`<h3>이 휴대폰 연결 끊기</h3><div class="warn">인터넷에 연결되어 있어야 연결을 끊을 수 있어요. (${esc(errMsg(e))})</div>
+      <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
+  });
+}
+/* 가족 중 마지막 휴대폰: 빠지고 나면 서버 기록을 아무도 지울 수 없으므로, 빠지기 전에 지움 */
+function askLeaveLast(){
+  openModal(`<h3>마지막 휴대폰이에요</h3>
+    <div>이 가족에 연결된 휴대폰은 이것 하나뿐이에요. 연결을 끊으면 <b>서버에 있는 가족 기록도 함께 지워요.</b></div>
+    <div class="tip">이 휴대폰의 기록은 그대로 남아서 계속 쓸 수 있어요. 나중에 다시 「가족 만들기」를 하면 새 가족 코드가 생겨요.</div>
+    <button class="btn full red" id="llBtn" onclick="doLeaveLast()">서버 기록 지우고 연결 끊기</button>
+    <button class="btn full ghost" onclick="closeModal()">취소</button>`);
+}
+function doLeaveLast(){
+  const b=$('llBtn'); b.disabled=true; b.textContent='지우는 중…';
+  Sync.leaveAndDelete().then(()=>call('getInitData')).then(d=>{applyInit(d);closeModal();renderManage();toast('서버 기록을 지우고 연결을 끊었어요')})
+    .catch(e=>{b.disabled=false;b.textContent='다시 시도';toast(errMsg(e))});
+}
+function askLeaveNormal(n){
   openModal(`<h3>이 휴대폰 연결 끊기</h3>
+    <div class="muted">지금 이 가족에 휴대폰 ${n}대가 연결되어 있어요.</div>
     <div>이 휴대폰만 가족에서 빠져요. 다른 휴대폰과 서버의 기록은 그대로예요.</div>
     <div class="muted" style="margin-top:6px">지금까지의 기록은 이 휴대폰에 남지만, 앞으로는 서로 맞춰지지 않아요.</div>
     <button class="btn full red" id="lfBtn" onclick="this.disabled=true;Sync.leave().then(()=>call('getInitData')).then(d=>{applyInit(d);closeModal();renderManage();toast('연결을 끊었어요')}).catch(e=>{this.disabled=false;toast(errMsg(e))})">연결 끊기</button>

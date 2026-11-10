@@ -22,7 +22,7 @@
     code: () => familyId,
     onStatus: null,      // (status) => void
     onFamilyGone: null,  // () => void — 다른 부모가 가족 데이터를 지웠을 때
-    create, join, resume, leave, destroyFamily, shareCode: formatCode,
+    create, join, resume, leave, destroyFamily, memberCount, leaveAndDelete, shareCode: formatCode,
     linkGoogle, switchToGoogle, restoreWithGoogle, unlinkGoogle
   };
 
@@ -311,24 +311,48 @@
     try { await u.unlink('google.com'); } catch (e) { throw authFriendly(e); }
   }
 
+  /** 서버에서 이 가족의 기록·가족 문서를 모두 지움 (구성원만 가능 — 그래서 빠지기 전에 해야 함) */
+  async function deleteServer_(code) {
+    for (const col of Store.COLS) {
+      const all = await famRef(code).collection(col).get();
+      for (let i = 0; i < all.docs.length; i += MAX_BATCH) {
+        const b = db.batch(); all.docs.slice(i, i + MAX_BATCH).forEach(d => b.delete(d.ref)); await b.commit();
+      }
+    }
+    await famRef(code).delete();
+    await syncUserDoc(null);
+  }
+
   /** 서버의 가족 데이터 전부 삭제 + 이 휴대폰도 비우기 */
   async function destroyFamily() {
     const snap = await Store.snapshot();
     if (!snap || !snap.sync) throw new Error('연결된 가족이 없어요.');
-    const code = snap.sync.familyId;
     await ready();
     stop();
-    try {
-      for (const col of Store.COLS) {
-        const all = await famRef(code).collection(col).get();
-        for (let i = 0; i < all.docs.length; i += MAX_BATCH) {
-          const b = db.batch(); all.docs.slice(i, i + MAX_BATCH).forEach(d => b.delete(d.ref)); await b.commit();
-        }
-      }
-      await famRef(code).delete();
-      await syncUserDoc(null);
-    } catch (e) { listen(snap.sync); throw friendly(e); }
+    try { await deleteServer_(snap.sync.familyId); } catch (e) { listen(snap.sync); throw friendly(e); }
     familyId = null; setStatus('off');
     await Store.wipe();
+  }
+
+  /** 가족에 연결된 휴대폰 수 (서버에서 직접 확인 — 인터넷이 없으면 오류) */
+  async function memberCount() {
+    const snap = await Store.snapshot();
+    if (!snap || !snap.sync) return 0;
+    await ready();
+    try {
+      const d = await famRef(snap.sync.familyId).get({ source: 'server' });
+      return d.exists ? (d.data().members || []).length : 0;
+    } catch (e) { throw friendly(e); }
+  }
+
+  /** 마지막 휴대폰이 빠질 때: 서버 기록은 지우고, 이 휴대폰의 기록은 그대로 남김 */
+  async function leaveAndDelete() {
+    const snap = await Store.snapshot();
+    if (!snap || !snap.sync) return;
+    await ready();
+    stop();
+    try { await deleteServer_(snap.sync.familyId); } catch (e) { listen(snap.sync); throw friendly(e); }
+    familyId = null; setStatus('off');
+    await Store.detach();
   }
 })();
