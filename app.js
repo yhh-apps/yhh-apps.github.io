@@ -135,7 +135,7 @@ function renderSetup(){
     <label class="f" style="margin-top:14px">아이 이름 (별명도 좋아요)</label>
     <div id="setupKids"><div class="kidrow"><input class="skid" placeholder="예: 첫째"></div></div>
     <button class="btn sm ghost" style="margin-top:8px" onclick="addSetupKid()">+ 아이 더 추가</button>
-    <div class="muted" style="margin-top:12px">기본 실천 항목(이불 개기, 책 읽기, 집안일 돕기 등)과 벌금 항목 2개가 들어가요. 설정 탭에서 언제든 바꿀 수 있어요.</div>
+    <div class="muted" style="margin-top:12px">기본 실천 항목(이불 개기, 책 읽기, 집안일 돕기 등)과 벌금 항목 2개가 들어가요. 「아이·항목」 탭에서 언제든 바꿀 수 있어요.</div>
     <button class="btn full" id="setupBtn" onclick="doSetup()">시작하기</button>
   </div>
   ${Sync.available()?`<div class="card">
@@ -206,7 +206,7 @@ document.addEventListener('visibilitychange',()=>{
 function renderKids(){
   $('kids').innerHTML = S.kids.map(k=>
     `<button class="kid ${k.id===S.kidId?'on':''}" onclick="pickKid('${k.id}')">${esc(k.emoji)} ${esc(k.name)}</button>`).join('');
-  $('kids').style.display = (S.tab==='manage'||S.kids.length<2||isKid())?'none':'flex';
+  $('kids').style.display = (S.tab==='manage'||S.tab==='items'||S.kids.length<2||isKid())?'none':'flex';
 }
 function pickKid(id){S.kidId=id;store('kidId',id);renderKids();render()}
 function setTab(t){
@@ -217,6 +217,7 @@ function setTab(t){
 function render(){
   if(S.locked) return;
   if(S.tab==='manage') return isKid()?renderKidGoals():renderManage();
+  if(S.tab==='items') return renderItems();
   if(S.tab==='check') return loadDay();
   if(S.tab==='ledger') return loadLedger();
 }
@@ -257,7 +258,7 @@ function renderDay(){
   if(daily.length) h+=`<div class="sec">☀️ 매일 실천 <span class="muted">(하루 최대 ${won(dayMax)})</span></div>`+daily.map(itemHtml).join('');
   if(weekly.length) h+=`<div class="sec">📅 이번 주 실천 <span class="muted">(월~일 한 주 동안)</span></div>`+weekly.map(itemHtml).join('');
   if(fineItems.length) h+=`<div class="sec">⚠️ 벌금 <span class="muted">(약속을 지키지 못했을 때)</span></div>`+fineItems.map(itemHtml).join('');
-  if(!d.items.length) h+='<div class="card muted">등록된 항목이 없어요. 설정 탭에서 항목을 추가해 주세요.</div>';
+  if(!d.items.length) h+='<div class="card muted">등록된 항목이 없어요. 「아이·항목」 탭에서 항목을 추가해 주세요.</div>';
   const extras=(d.interests||[]).map(x=>`<div class="row" style="padding:4px 0"><span>🏦 ${esc(x.name)}</span><span class="bonus">+${won(x.amount)}</span></div>`).join('')
     +(d.cheers||[]).map(c=>`<div class="row" style="padding:4px 0"><span>💌 ${esc(c.name)}</span>${isGp()?'':`<button class="del" onclick="askDelBonus('${c.id}',0)">삭제</button>`}</div>`).join('');
   h+=`<div class="sec">🎁 특별 보너스 <span class="muted">(받은 용돈·칭찬·응원)</span></div>
@@ -605,9 +606,9 @@ function doTransfer(){
   }).catch(e=>{$('tBtn').disabled=false;toast(errMsg(e))});
 }
 
-/* ---------- 설정 ---------- */
-function renderManage(){
-  if(isGp()) return renderGpManage();
+/* ---------- 아이·항목 ---------- */
+function renderItems(){
+  if(viewOnly()) return setTab('manage');
   const est =S.kids.map(k=>{
     const its=S.items.filter(i=>i.active&&i.amount>0&&(i.target==='ALL'||i.target===k.id));
     const calc=f=>{
@@ -634,7 +635,13 @@ function renderManage(){
       ${kidPlusBadges(k)}</div>
       <button class="btn sm ghost" onclick="editKid('${k.id}')">수정</button>
       <button class="btn sm ghost" onclick="askDelKid('${k.id}')">삭제</button></div>`).join('')+`</div>`;
-  h+=familyCardHtml();
+  $('view').innerHTML=h;
+}
+
+/* ---------- 설정 ---------- */
+function renderManage(){
+  if(isGp()) return renderGpManage();
+  let h=familyCardHtml();
   h+=accountCardHtml();
   h+=payCardHtml();
   h+=`<div class="card"><div class="jua" style="font-size:18px">🔒 앱 잠금</div>
@@ -650,7 +657,7 @@ function renderManage(){
       <button class="btn full ghost" style="color:var(--red)" onclick="askReset()">모든 기록 지우고 처음부터</button></div>`;
   $('view').innerHTML=h;
 }
-function afterSave(d,msg){applyInit(d);closeModal();renderKids();renderManage();toast(msg)}
+function afterSave(d,msg){applyInit(d);closeModal();renderKids();render();toast(msg)}
 
 function editItem(id){
   const it=S.items.find(i=>i.id===id)||{name:'',meaning:'',amount:50,period:'매일',target:'ALL',active:true,maxCount:3};

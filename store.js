@@ -120,7 +120,7 @@
     const purchased = !!(D && D.settings.plusPurchased);
     return { active: promo || purchased, promo: promo, promoEnd: promoEnd, purchased: purchased, price: cfg.price || '' };
   }
-  function needPlus_() { if (!plus_().active) throw new Error('플러스 기능이에요. 설정 → 용돈 받아라 플러스에서 시작해 주세요.'); }
+  function needPlus_() { if (!plus_().active) throw new Error('플러스 기능이에요. 「아이·항목」 탭의 용돈 받아라 플러스에서 시작해 주세요.'); }
 
   /** 세 개의 통장 잔액 — 들어온 돈(실천·보너스)을 비율대로 나누고, 이자는 저축 통장, 쓴 돈은 고른 통장에서 뺌 */
   function jarOf_(s) { return JARS.indexOf(s.jar) >= 0 ? s.jar : (s.method === TRANSFER ? 'save' : 'spend'); }

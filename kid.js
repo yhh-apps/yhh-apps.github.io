@@ -7,8 +7,14 @@ function viewOnly(){return S.role==='gp'||S.role==='kid'}
 
 /* ---------- 탭 이름: 역할에 따라 ---------- */
 function setTabLabels(){
-  const L=isKid()?[['✅','오늘 할 일'],['📒','내 통장'],['🎯','내 목표']]:[['✅','실천 체크'],['📒','통장'],['⚙️','설정']];
-  document.querySelectorAll('.tab').forEach((b,i)=>{b.innerHTML=`<b>${L[i][0]}</b>${L[i][1]}`});
+  const L=isKid()?{check:['✅','오늘 할 일'],ledger:['📒','내 통장'],manage:['🎯','내 목표']}
+    :{check:['✅','실천 체크'],ledger:['📒','통장'],items:['🧩','아이·항목'],manage:['⚙️','설정']};
+  if(viewOnly()){ delete L.items; if(S.tab==='items') S.tab='manage'; }
+  document.querySelectorAll('.tab').forEach(b=>{
+    const l=L[b.dataset.tab]; b.classList.toggle('hide',!l);
+    if(l) b.innerHTML=`<b>${l[0]}</b>${l[1]}`;
+    b.classList.toggle('on',b.dataset.tab===S.tab);
+  });
 }
 
 /* ================= 👧 아이 화면 ================= */
@@ -61,7 +67,7 @@ function openDidIt(itemId){
     <div class="muted">했다는 걸 보여 주면 엄마·아빠가 확인하고 +${won(it.amount)}을 넣어 줘요.</div>
     ${canPhoto?`<label class="photobtn"><input type="file" accept="image/*" capture="environment" onchange="pickPhoto(this)">📷 사진 찍기</label>
     <img id="didPrev" class="didprev hide" alt="">
-    <div class="muted" style="margin-top:4px">사진은 엄마·아빠가 확인하면 바로 지워져요.</div>`:'<div class="tip">사진 인증은 엄마·아빠가 설정에서 허락하면 쓸 수 있어요. 지금은 「했어요!」만 보낼게요.</div>'}
+    <div class="muted" style="margin-top:4px">사진은 엄마·아빠가 확인하면 바로 지워져요.</div>`:'<div class="tip">사진 인증은 엄마·아빠가 허락하면 쓸 수 있어요. 지금은 「했어요!」만 보낼게요.</div>'}
     <label class="f">한마디 (선택)</label><input id="didMemo" placeholder="예: 혼자서 다 했어요!">
     <button class="btn full" style="background:var(--green)" id="didBtn" onclick="sendDidIt('${itemId}')">엄마·아빠에게 보내기</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
