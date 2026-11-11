@@ -146,6 +146,8 @@ function applyInit(d){
   if(!S.kids.some(k=>k.id===S.kidId)) S.kidId=S.kids[0]&&S.kids[0].id;
 }
 function startMain(){
+  // 보호자 화면은 어른만: 이 휴대폰에서 나이 확인을 아직 안 했으면 먼저 확인 (자녀·조부모 화면은 건너뜀)
+  if(S.role==='parent'&&!S.kidRole&&!adultOk()){ afterAge=startMain; return renderAgeGate(); }
   S.locked=false; S.started=true;
   S.date=S.date||S.today; S.month=S.month||S.today.slice(0,7);
   const saved=load('kidId');
@@ -164,9 +166,65 @@ function runAccrue(){
 }
 function isGp(){return S.role==='gp'}
 
+/* ---------- 나이 확인 (가족 정책의 「중립적인 나이 확인」) ----------
+   보호자 화면(어른용)을 열기 전에 태어난 해를 물어봄. 정답을 암시하지 않도록 빈칸에서 시작하고, 나이 기준도 화면에 쓰지 않음.
+   만 19세 이상(연도 기준)이면 보호자 화면, 아니면 자녀 화면 시작(가족 코드)으로 안내. 결과는 이 기기에만 저장(태어난 해 자체는 저장 안 함) */
+const ADULT_AGE=19;
+let afterAge=null;
+function adultOk(){return load('adultOk')==='1'}
+function isKidDevice(){return load('ageKid')==='1'}
+function adsAllowed(){ // 나중에 광고를 넣을 때 쓸 조건: 어른 확인된 보호자 화면 + 플러스 안 산 사람 + 예시 자료 아님. 자녀·조부모 화면은 절대 안 됨
+  return S.role==='parent'&&!S.kidRole&&adultOk()&&!(S.plus&&S.plus.purchased)&&!S.demo;
+}
+function renderAgeGate(){
+  $('tabs').classList.add('hide'); $('kids').innerHTML=''; $('demoBar').classList.add('hide'); closeModal();
+  const y=new Date().getFullYear(), years=[];
+  for(let i=y;i>=y-100;i--) years.push(i);
+  $('view').innerHTML=`<div class="card setupcard">
+    <div class="jua" style="font-size:21px">👋 반가워요!</div>
+    <div style="margin-top:6px">시작하기 전에 태어난 해를 알려 주세요.</div>
+    <select id="ageYear" style="margin-top:12px;font-size:17px;padding:12px"><option value="">태어난 해 고르기</option>${years.map(v=>`<option value="${v}">${v}년</option>`).join('')}</select>
+    <button class="btn full big" onclick="checkAge()">다음</button>
+    <div class="muted center" style="margin-top:8px">태어난 해는 저장하지 않아요</div>
+  </div>`;
+}
+function checkAge(){
+  const v=Number($('ageYear').value);
+  if(!v){toast('태어난 해를 골라 주세요');return}
+  if(new Date().getFullYear()-v>=ADULT_AGE){ store('adultOk','1'); const f=afterAge||renderSetup; afterAge=null; f(); }
+  else { store('ageKid','1'); renderKidStart(); }
+}
+/* 자녀가 자기 휴대폰에서 처음 열었을 때: 가족 코드 → 내 이름 고르기 → 광고 없는 자녀 화면 */
+function renderKidStart(){
+  $('tabs').classList.add('hide'); $('kids').innerHTML=''; $('demoBar').classList.add('hide');
+  $('view').innerHTML=`<div class="card setupcard center">
+    <div style="font-size:54px">🧒</div>
+    <div class="jua" style="font-size:22px">내 용돈 통장 시작!</div>
+    <div style="margin-top:6px">엄마·아빠에게 <b>가족 코드</b>를 받아서 넣어 주세요.</div>
+    <input id="kidCode" class="codein" placeholder="ABCD-EFGH" maxlength="9" autocomplete="off" style="margin-top:12px">
+    <button class="btn full big" style="background:var(--green)" id="kidCodeBtn" onclick="doKidCodeJoin()">다음</button>
+    <div class="muted" style="margin-top:8px">엄마·아빠 휴대폰의 「더보기 → 가족 연결」에 가족 코드가 있어요.</div>
+  </div>`;
+}
+function doKidCodeJoin(){
+  if(!Sync.available()){toast('지금은 가족 연결을 쓸 수 없어요');return}
+  const b=$('kidCodeBtn'); b.disabled=true; b.textContent='찾는 중…';
+  Sync.join($('kidCode').value).then(()=>call('getInitData')).then(d=>{
+    applyInit(d);
+    if(!d.kids.length){toast('가족에 아직 자녀가 없어요. 엄마·아빠에게 물어봐요');b.disabled=false;b.textContent='다음';return}
+    $('view').innerHTML=`<div class="card setupcard center"><div class="jua" style="font-size:22px">누구예요?</div>
+      <div class="list" style="margin-top:12px;text-align:left">${d.kids.map(k=>`<button class="lrow" onclick="doKidPick('${k.id}')"><span class="li">${esc(k.emoji)}</span><span class="lt">${esc(k.name)}</span><span class="chev">›</span></button>`).join('')}</div></div>`;
+  }).catch(e=>{b.disabled=false;b.textContent='다시 시도';toast(errMsg(e))});
+}
+function doKidPick(kidId){
+  call('setKidRole',kidId,false).then(d=>{applyInit(d);S.tab='check';S.date=null;S.month=null;startMain();toast('반가워요! 오늘도 화이팅 💪')})
+    .catch(e=>toast(errMsg(e)));
+}
+
 /* ---------- 처음 시작 ---------- */
 function renderSetup(){
   $('tabs').classList.add('hide'); $('kids').innerHTML=''; $('demoBar').classList.add('hide');
+  if(!adultOk()){ if(isKidDevice()) return renderKidStart(); afterAge=renderSetup; return renderAgeGate(); }
   // 첫 화면은 「이름 넣고 시작하기」 하나만 크게, 나머지 시작 방법은 한 줄씩 (누르면 창으로 자세히)
   const sync=Sync.available();
   $('view').innerHTML=`<div class="card setupcard">
@@ -903,6 +961,8 @@ function familyCardHtml(){
     <div class="code">${esc(Sync.shareCode(S.family))}</div>
     <div class="muted" id="syncStatus">${statusHtml()}</div>
     <button class="btn full" style="background:var(--green)" onclick="shareFamilyCode()">💬 가족 초대 보내기 (앱 설치 링크 포함)</button>
+    <button class="btn full" style="background:#4D96FF" onclick="pickKidFor('openKidAccess')">🧒 자녀 휴대폰 초대하기 ${plusTag()}</button>
+    <div class="muted" style="margin-top:4px">자녀 휴대폰에는 광고 없는 자녀 화면(오늘 할 일·내 통장·내 목표)만 보여요. 링크 대신 위 가족 코드를 자녀 휴대폰 첫 화면에 넣어도 돼요.</div>
     <button class="btn full" style="background:#B07CE8" onclick="shareGpInvite()">👵 할머니·할아버지 초대하기 ${plusTag()}</button>
     <button class="btn full ghost" onclick="askLeaveFamily()">이 휴대폰 연결 끊기</button>
     <button class="btn full ghost" style="color:var(--red)" onclick="askDestroyFamily()">가족 데이터 서버에서 모두 삭제</button></div>`;
