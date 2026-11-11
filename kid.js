@@ -248,9 +248,9 @@ function openPayFlow(amount){
   openModal(`<h3>💸 ${won(amount)} 보내기</h3>
     <div>통장에 기록했어요! 이제 실제 돈을 부모님께 보내 주세요.</div>
     ${has?'':'<div class="warn">부모님이 아직 받을 곳을 등록하지 않았어요. 부모님께 직접 전해 주세요.</div>'}
-    ${p.kakao?`<button class="btn full" style="background:#FEE500;color:#3C1E1E" onclick="location.href=S.pay.kakao">카카오페이로 보내기</button>
+    ${p.kakao?`<button class="btn full" style="background:#FEE500;color:#3C1E1E" onclick="openExternal(S.pay.kakao)">카카오페이로 보내기</button>
       <div class="muted">카카오페이가 열리면 금액 ${won(amount)}을 확인하고 보내 주세요.</div>`:''}
-    ${toss?`<button class="btn full" style="background:#0064FF" onclick="location.href=S.payTossUrl">토스로 보내기</button>`:''}
+    ${toss?`<button class="btn full" style="background:#0064FF" onclick="openExternal(S.payTossUrl)">토스로 보내기</button>`:''}
     ${p.account?`<button class="btn full ghost" onclick="copyPay(${amount})">계좌번호 복사 (${esc(p.bank)} ${esc(p.account)})</button>`:''}
     <button class="btn full ghost" onclick="closeModal()">나중에 보낼게요</button>`);
 }

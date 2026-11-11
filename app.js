@@ -71,7 +71,8 @@ function showErr(e){$('view').innerHTML='<div class="card warn">'+esc(errMsg(e))
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>setTab(b.dataset.tab));
 
 /* 카톡 외 다른 앱 안의 브라우저(네이버·인스타·페북·라인 등)로 열렸으면 안내 */
-if(/NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|KAKAOTALK|DaumApps|everytimeApp|; wv\)/i.test(navigator.userAgent)) $('inappBar').classList.remove('hide');
+// 우리 Android 앱(Capacitor)도 WebView라 「; wv)」가 붙으므로 앱일 때는 안내하지 않음
+if(!NATIVE&&/NAVER\(inapp|Instagram|FBAN|FBAV|Line\/|KAKAOTALK|DaumApps|everytimeApp|; wv\)/i.test(navigator.userAgent)) $('inappBar').classList.remove('hide');
 
 /* 가족 초대 링크: ?join=가족코드 로 열면 코드를 자동으로 넣어 줌 */
 let INVITE=null, INVITE_GP=false, INVITE_KID='';
@@ -1085,18 +1086,15 @@ function doPin(off){
 function doExport(){
   call('exportData').then(async text=>{
     const name='용돈받아라_백업_'+S.today+'.json';
-    if(NATIVE){ try{ await nativeSaveBackup(name,text); toast('백업 파일을 만들었어요'); }catch(e){ if(!/cancel/i.test(String(e&&e.message))) toast(errMsg(e)); } return; }
+    // 앱: 휴대폰 「문서/용돈받아라」 폴더에 바로 저장 (안 되는 휴대폰만 공유 창으로)
+    if(NATIVE){ try{ const r=await nativeSaveBackup(name,text); toast(r==='saved'?'📁 휴대폰 「내 파일 → 문서 → 용돈받아라」에 저장했어요':'백업 파일을 만들었어요'); }
+      catch(e){ if(!/cancel/i.test(String(e&&e.message))) toast(errMsg(e)); } return; }
+    // 웹(크롬): 공유 창 없이 바로 다운로드 폴더에 저장
     const blob=new Blob([text],{type:'application/json'});
-    try{
-      const file=new File([blob],name,{type:'application/json'});
-      if(navigator.canShare&&navigator.canShare({files:[file]})){
-        await navigator.share({files:[file],title:'용돈 받아라 백업'}); toast('백업 파일을 보냈어요'); return;
-      }
-    }catch(e){ if(e&&e.name==='AbortError') return; }
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),5000);
-    toast('백업 파일을 저장했어요');
+    toast('📁 백업 파일을 「다운로드」 폴더에 저장했어요');
   }).catch(e=>toast(errMsg(e)));
 }
 function askImport(){
