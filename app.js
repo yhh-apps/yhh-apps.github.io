@@ -30,6 +30,7 @@ function openModal(html){
   $('sheet').innerHTML=html;
   if(!$('modal').classList.contains('on')&&navState()!=='modal') pushNav('modal'); // 뒤로가기로 창만 닫히게
   $('modal').classList.add('on');
+  updateAd();
 }
 function closeModal(fromBack){
   $('modal').classList.remove('on');
@@ -37,6 +38,7 @@ function closeModal(fromBack){
     if(!$('modal').classList.contains('on')&&navState()==='modal') popNav();
   },0);
   if(pendingRefresh){pendingRefresh=false;if(!S.locked&&S.kids.length){renderKids();render()}}
+  updateAd();
 }
 
 /* ---------- 휴대폰 뒤로가기 ----------
@@ -196,7 +198,7 @@ function checkAge(){
 }
 /* 자녀가 자기 휴대폰에서 처음 열었을 때: 가족 코드 → 내 이름 고르기 → 광고 없는 자녀 화면 */
 function renderKidStart(){
-  $('tabs').classList.add('hide'); $('kids').innerHTML=''; $('demoBar').classList.add('hide');
+  $('tabs').classList.add('hide'); $('kids').innerHTML=''; $('demoBar').classList.add('hide'); updateAd();
   $('view').innerHTML=`<div class="card setupcard center">
     <div style="font-size:54px">🧒</div>
     <div class="jua" style="font-size:22px">내 용돈 통장 시작!</div>
@@ -223,7 +225,7 @@ function doKidPick(kidId){
 
 /* ---------- 처음 시작 ---------- */
 function renderSetup(){
-  $('tabs').classList.add('hide'); $('kids').innerHTML=''; $('demoBar').classList.add('hide');
+  $('tabs').classList.add('hide'); $('kids').innerHTML=''; $('demoBar').classList.add('hide'); updateAd();
   if(!adultOk()){ if(isKidDevice()) return renderKidStart(); afterAge=renderSetup; return renderAgeGate(); }
   // 첫 화면은 「이름 넣고 시작하기」 하나만 크게, 나머지 시작 방법은 한 줄씩 (누르면 창으로 자세히)
   const sync=Sync.available();
@@ -320,6 +322,7 @@ function setTab(t,fromBack){
 }
 function render(){
   if(S.locked) return;
+  updateAd();
   if(S.tab==='manage') return isKid()?renderKidGoals():renderManage();
   if(S.tab==='items') return renderItems();
   if(S.tab==='check') return loadDay();
@@ -362,18 +365,7 @@ function renderDay(){
   if(weekly.length) h+=`<div class="sec">📅 이번 주 실천 <span class="muted">(월~일 한 주 동안)</span></div>`+weekly.map(itemHtml).join('');
   if(fineItems.length) h+=`<div class="sec">⚠️ 벌금 <span class="muted">(약속을 지키지 못했을 때)</span></div>`+fineItems.map(itemHtml).join('');
   if(!d.items.length) h+='<div class="card muted">등록된 항목이 없어요. 「자녀·항목」 탭에서 항목을 추가해 주세요.</div>';
-  const extras=(d.interests||[]).map(x=>`<div class="row" style="padding:4px 0"><span>🏦 ${esc(x.name)}</span><span class="bonus">+${won(x.amount)}</span></div>`).join('')
-    +(d.cheers||[]).map(c=>`<div class="row" style="padding:4px 0"><span>💌 ${esc(c.name)}</span>${isGp()?'':`<button class="del" onclick="askDelBonus('${c.id}',0)">삭제</button>`}</div>`).join('');
-  const blines=extras+d.bonuses.map(b=>`<div class="row" style="padding:4px 0"><span>🎁 ${esc(b.name)}</span>
-        <span><span class="bonus">+${won(b.amount)}</span> ${isGp()?'':`<button class="del" onclick="askDelBonus('${b.id}',${b.amount})">삭제</button>`}</span></div>`).join('');
-  // 특별 보너스: 제목 한 줄 + 넣기 버튼, 받은 게 있을 때만 목록
-  h+=`<div class="bonusbox">
-      <div class="row"><span class="jua" style="font-size:17px">🎁 특별 보너스</span>
-        ${isGp()?`<button class="btn sm" style="background:#FFB020" onclick="openCheer()">💌 응원·용돈 보내기</button>`
-          :`<button class="btn sm" style="background:#FFB020" onclick="openBonus()">+ 넣기</button>`}</div>
-      ${blines?`<div style="margin-top:6px">${blines}</div>`:''}
-    </div>
-    ${isGp()?'':shareBtnHtml()}`;
+  // 실천 체크 탭은 체크만. 특별 보너스 넣기·결과 보내기·응원은 통장 탭 잔액 카드에 있음
   $('view').innerHTML=h;
 }
 // 세 개의 통장 (플러스)
@@ -489,10 +481,16 @@ function buildMonthMsg(){
 }
 function shareDay(){previewShare(buildDayMsg(),'하루 결과 보내기')}
 function shareMonth(){previewShare(buildMonthMsg(),'한 달 통장 보내기')}
-/* 실천 탭·통장 탭 맨 아래 공통: 한 줄 버튼 → 「그날 실천 결과 / 그달 통장」 중 골라서 보내기 */
-function shareBtnHtml(){
-  return `<button class="sharebtn" onclick="openShare()"><span>💬 ${esc(callName(kid().name))}에게 결과 보내기</span><span class="chev">›</span></button>`;
+/* 통장 탭 잔액 카드의 버튼 줄: 보호자는 보너스 넣기·실물 통장 이체·결과 보내기, 조부모는 응원·용돈 보내기, 자녀는 없음 */
+function ledgerActionsHtml(){
+  if(isGp()) return '<div class="actrow"><button class="act" style="--c:#FFB020" onclick="openCheer()"><b>💌</b>응원·용돈 보내기</button></div>';
+  if(viewOnly()) return '';
+  return '<div class="actrow">'+
+    '<button class="act" style="--c:#FFB020" onclick="openBonus()"><b>🎁</b>보너스 넣기</button>'+
+    '<button class="act" style="--c:var(--blue)" onclick="openTransfer()"><b>🏦</b>통장 이체</button>'+
+    '<button class="act" style="--c:var(--green)" onclick="openShare()"><b>💬</b>결과 보내기</button></div>';
 }
+/* 결과 보내기: 「그날 실천 결과 / 그달 통장」 중 골라서 보내기 */
 function openShare(){
   const k=kid(), date=S.date||S.today, month=S.tab==='ledger'&&S.month?S.month:date.slice(0,7);
   S.shareMonth=month;
@@ -553,7 +551,7 @@ function openBonus(){
     <div class="chips" id="bChips">${BONUS_FROM.map((x,i)=>`<button type="button" onclick="pickFrom(this,${i})">${x}</button>`).join('')}</div>
     <input id="bFrom" placeholder="직접 입력 (예: 큰이모)">
     <label class="f">금액(원)</label><input id="bAmt" type="number" inputmode="numeric" step="1000">
-    <label class="f">날짜</label><input id="bDate" type="date" value="${S.date}" max="${S.today}">
+    <label class="f">날짜</label><input id="bDate" type="date" value="${S.date||S.today}" max="${S.today}">
     <label class="f">메모 (선택)</label><input id="bMemo" placeholder="예: 추석, 생일 축하">
     <div class="tip">💡 받은 돈 중 얼마를 실물 통장에 저축할지 자녀와 함께 정해 보세요.</div>
     <button class="btn full" id="bBtn" onclick="doBonus()">통장에 넣기</button>
@@ -563,8 +561,8 @@ function pickFrom(btn,i){$('bFrom').value=BONUS_FROM[i];document.querySelectorAl
 function doBonus(){
   const b={from:$('bFrom').value,amount:Number($('bAmt').value),date:$('bDate').value,memo:$('bMemo').value};
   $('bBtn').disabled=true;
-  call('addBonus',S.kidId,b,S.date).then(d=>{
-    S.day=d; closeModal(); renderDay(); toast('🎁 '+won(b.amount)+' 보너스를 넣었어요!');
+  call('addBonus',S.kidId,b,S.date||S.today).then(d=>{
+    if(S.tab==='check') S.day=d; closeModal(); render(); // 지금 보는 탭(통장 탭)을 새로 그림 toast('🎁 '+won(b.amount)+' 보너스를 넣었어요!');
   }).catch(e=>{$('bBtn').disabled=false;toast(errMsg(e))});
 }
 function askDelBonus(id,amt,fromLedger){
@@ -575,7 +573,7 @@ function askDelBonus(id,amt,fromLedger){
 }
 function doDelBonus(id,fromLedger){
   $('dbBtn').disabled=true;
-  call('deleteBonus',id,S.kidId,S.date).then(d=>{
+  call('deleteBonus',id,S.kidId,S.date||S.today).then(d=>{
     closeModal(); toast('삭제했어요');
     if(fromLedger) loadLedger(); else {S.day=d; renderDay();}
   }).catch(e=>{$('dbBtn').disabled=false;toast(errMsg(e))});
@@ -648,10 +646,10 @@ function renderLedger(L){
     <div class="bal-label">${esc(k.emoji)} ${esc(callName(k.name))}의 앱 통장 잔액</div>
     <div class="bal ${L.balance<0?'minus':''}">${won(L.balance)}</div>
     ${jarsHtml(L.jars)}
+    ${ledgerActionsHtml()}
     ${interestHtml(L)}
     ${goalHtml(k,L.balance)}${spendGoalHtml(L.spendGoal)}
     <div class="muted" style="margin-top:10px">🏦 지금까지 실물 통장으로 옮긴 돈: <b style="color:var(--blue)">${won(L.totalSaved)}</b></div>
-    ${viewOnly()?'':'<button class="btn full" style="background:var(--blue)" onclick="openTransfer()">🏦 실물 통장으로 이체하기</button>'}
     <div class="mini">
       <div><span class="muted">실천으로 번 돈</span><b class="in">+${won(L.monthIn)}</b></div>
       <div><span class="muted">특별 보너스${L.monthInterest?' · 이자':''}</span><b class="bonus">+${won(L.monthBonus+(L.monthInterest||0))}</b></div>
@@ -675,7 +673,7 @@ function renderLedger(L){
   h+=`<div class="card"><div class="jua" style="font-size:18px">📒 ${esc(callName(k.name))}의 통장 내역</div>
     <div id="histBox">${historyHtml(L)}</div>`;
   h+=`</div>
-    ${viewOnly()?'':shareBtnHtml()}`;
+`;
   $('view').innerHTML=h;
   bindWeekSwipe();
 }
@@ -1087,6 +1085,7 @@ function doPin(off){
 function doExport(){
   call('exportData').then(async text=>{
     const name='용돈받아라_백업_'+S.today+'.json';
+    if(NATIVE){ try{ await nativeSaveBackup(name,text); toast('백업 파일을 만들었어요'); }catch(e){ if(!/cancel/i.test(String(e&&e.message))) toast(errMsg(e)); } return; }
     const blob=new Blob([text],{type:'application/json'});
     try{
       const file=new File([blob],name,{type:'application/json'});
@@ -1129,6 +1128,6 @@ function doReset(){
 }
 
 /* ---------- 오프라인 (서비스 워커) ---------- */
-if('serviceWorker' in navigator && location.protocol!=='file:'){
+if('serviceWorker' in navigator && location.protocol!=='file:' && !NATIVE){ // Android 앱은 파일이 앱 안에 있어서 오프라인 저장이 필요 없음
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }

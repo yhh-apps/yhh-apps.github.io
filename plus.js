@@ -254,8 +254,8 @@ let cheerAmt=0;
 function pickCheerAmt(btn,v){cheerAmt=v;document.querySelectorAll('#chAmt button').forEach(b=>b.classList.toggle('on',b===btn))}
 function doCheer(){
   $('chBtn').disabled=true;
-  call('addCheer',S.kidId,{from:$('chFrom').value,msg:$('chMsg').value,amount:cheerAmt},S.date).then(d=>{
-    S.day=d; closeModal(); renderDay(); toast(cheerAmt?'💌 응원과 용돈을 기록했어요':'💌 응원을 보냈어요');
+  call('addCheer',S.kidId,{from:$('chFrom').value,msg:$('chMsg').value,amount:cheerAmt},S.date||S.today).then(d=>{
+    if(S.tab==='check') S.day=d; closeModal(); render(); toast(cheerAmt?'💌 응원과 용돈을 기록했어요':'💌 응원을 보냈어요');
     if(cheerAmt) setTimeout(()=>openPayFlow(cheerAmt),400);
   }).catch(e=>{$('chBtn').disabled=false;toast(errMsg(e))});
 }
