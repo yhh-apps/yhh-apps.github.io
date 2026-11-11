@@ -83,9 +83,8 @@ function applyInvite(){
   const c=INVITE; INVITE=null; const shown=Sync.shareCode(c);
   if(!S.kids.length&&INVITE_GP){ renderGpSetup(c); return; } // 조부모 초대
   if(!S.kids.length&&INVITE_KID){ renderKidSetup(c,INVITE_KID); return; } // 자녀 기기 초대
-  if(!S.kids.length&&$('joinCode')){ // 첫 화면
-    $('joinCode').value=shown; $('joinCode').scrollIntoView({block:'center'});
-    toast('가족 코드가 입력됐어요. 「가족 코드로 참여하기」를 눌러 주세요');
+  if(!S.kids.length){ // 첫 화면: 코드를 넣은 참여 창을 바로 띄움
+    openJoinSetup(shown);
     return;
   }
   if(S.family===c){toast('이미 이 가족과 연결되어 있어요');return}
@@ -168,29 +167,32 @@ function isGp(){return S.role==='gp'}
 /* ---------- 처음 시작 ---------- */
 function renderSetup(){
   $('tabs').classList.add('hide'); $('kids').innerHTML=''; $('demoBar').classList.add('hide');
-  $('view').innerHTML=`<div class="card">
-    <div class="jua" style="font-size:21px">👋 환영해요!</div>
-    <div style="margin-top:6px">자녀가 집안일·좋은 습관을 실천하면 용돈이 쌓이고, 쓴 돈과 저축을 함께 기록하는 <b>부모용</b> 용돈 관리 앱이에요.</div>
-    <div class="tip">🔒 회원가입이 없어요. 기록은 이 휴대폰에 저장되고, 엄마·아빠 휴대폰을 연결(가족 코드)할 때만 동기화 서버를 써요.</div>
-    <label class="f" style="margin-top:14px">자녀 이름 (별명도 좋아요)</label>
-    <div id="setupKids"><div class="kidrow"><input class="skid" placeholder="예: 첫째"></div></div>
+  // 첫 화면은 「이름 넣고 시작하기」 하나만 크게, 나머지 시작 방법은 한 줄씩 (누르면 창으로 자세히)
+  const sync=Sync.available();
+  $('view').innerHTML=`<div class="card setupcard">
+    <div class="jua" style="font-size:21px">👋 자녀 이름을 알려 주세요</div>
+    <div id="setupKids"><div class="kidrow"><input class="skid" placeholder="예: 첫째 (별명도 좋아요)"></div></div>
     <button class="btn sm ghost" style="margin-top:8px" onclick="addSetupKid()">+ 자녀 더 추가</button>
-    <div class="muted" style="margin-top:12px">기본 실천 항목(이불 개기, 책 읽기, 집안일 돕기 등)과 벌금 항목 2개가 들어가요. 「자녀·항목」 탭에서 언제든 바꿀 수 있어요.</div>
-    <button class="btn full" id="setupBtn" onclick="doSetup()">시작하기</button>
+    <button class="btn full big" id="setupBtn" onclick="doSetup()">시작하기</button>
+    <div class="muted center" style="margin-top:8px">🔒 회원가입 없이 이 휴대폰에 저장돼요</div>
   </div>
-  ${Sync.available()?`<div class="card">
-    <div class="jua" style="font-size:18px">👨‍👩‍👧 다른 부모님이 먼저 시작했나요?</div>
-    <div class="muted" style="margin-top:4px">먼저 쓰고 있는 휴대폰의 「더보기 → 가족 연결」에 나오는 가족 코드를 입력하면 같은 기록을 함께 써요.</div>
-    <input id="joinCode" class="codein" placeholder="ABCD-EFGH" maxlength="9" autocomplete="off" style="margin-top:10px">
-    <button class="btn full" style="background:var(--green)" id="joinBtn" onclick="doJoin()">가족 코드로 참여하기</button>
-  </div>`:''}
-  ${restoreCardHtml()}
-  <div class="card">
-    <div class="jua" style="font-size:18px">👀 어떻게 쓰는지 먼저 볼까요?</div>
-    <div class="muted" style="margin-top:4px">예시 자녀 2명의 4주치 기록(실천·벌금·보너스·지출·저축)으로 둘러볼 수 있어요. 언제든 내 자녀로 새로 시작할 수 있어요.</div>
-    <button class="btn full" style="background:var(--blue)" id="demoBtn" onclick="doDemo()">예시로 둘러보기</button>
-    <button class="btn full ghost" onclick="$('importFile').click()">📂 백업 파일에서 불러오기</button>
-  </div>`;
+  <div class="lhead">다른 방법으로 시작하기</div>
+  <div class="list">
+    <button class="lrow" id="demoBtn" onclick="doDemo()"><span class="li">👀</span><span class="lt">예시로 먼저 둘러보기</span><span class="chev">›</span></button>
+    ${sync?`<button class="lrow" onclick="openJoinSetup()"><span class="li">👨‍👩‍👧</span><span class="lt">가족 코드로 참여하기</span><span class="chev">›</span></button>
+    <button class="lrow" onclick="openRestoreSetup()"><span class="li">📲</span><span class="lt">Google 계정으로 기록 되찾기</span><span class="chev">›</span></button>`:''}
+    <button class="lrow" onclick="$('importFile').click()"><span class="li">📂</span><span class="lt">백업 파일에서 불러오기</span><span class="chev">›</span></button>
+  </div>
+  <div class="muted center" style="margin-top:6px">기본 실천 항목이 들어가요. 시작한 뒤 언제든 바꿀 수 있어요.</div>`;
+}
+function openRestoreSetup(){openModal(restoreCardHtml()+'<button class="btn full ghost" onclick="closeModal()">닫기</button>')}
+/* 첫 화면: 다른 부모님이 먼저 만든 가족에 참여 (code: 초대 링크로 열었을 때 미리 넣을 코드) */
+function openJoinSetup(code){
+  openModal(`<h3>👨‍👩‍👧 가족 코드로 참여하기</h3>
+    <div class="muted">먼저 쓰고 있는 휴대폰의 「더보기 → 가족 연결」에 나오는 가족 코드를 넣어 주세요.</div>
+    <input id="joinCode" class="codein" placeholder="ABCD-EFGH" maxlength="9" autocomplete="off" style="margin-top:10px" value="${esc(code||'')}">
+    <button class="btn full" style="background:var(--green)" id="joinBtn" onclick="doJoin()">참여하기</button>
+    <button class="btn full ghost" onclick="closeModal()">취소</button>`);
 }
 function doDemo(){
   $('demoBtn').disabled=true;
