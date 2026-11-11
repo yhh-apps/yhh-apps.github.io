@@ -670,10 +670,9 @@ function renderLedger(L){
     h+=`<details class="fold"><summary>🏅 이번 달 많이 실천한 것</summary><div class="fbody">`+
       L.stats.slice(0,5).map((s,i)=>`<div class="est"><span>${['🥇','🥈','🥉','④','⑤'][i]} ${esc(s.name)}</span><span class="muted r">${s.count}번 · ${won(s.amount)}</span></div>`).join('')+`</div></details>`;
   }
-  h+=`<div class="card"><div class="jua" style="font-size:18px">📒 ${esc(callName(k.name))}의 통장 내역</div>
-    <div id="histBox">${historyHtml(L)}</div>`;
-  h+=`</div>
-`;
+  // 통장 내역도 접는 칸. 한 번 펼치면 앱을 쓰는 동안 펼친 채로 기억(지우기 등으로 다시 그려도 그대로)
+  h+=`<details class="fold" ${S.histFoldOpen?'open':''} ontoggle="S.histFoldOpen=this.open"><summary>📒 ${esc(callName(k.name))}의 통장 내역</summary>
+    <div class="fbody"><div id="histBox">${historyHtml(L)}</div></div></details>`;
   $('view').innerHTML=h;
   bindWeekSwipe();
 }
