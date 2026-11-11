@@ -831,12 +831,12 @@ function renderManage(){
       ${tile('📜','용돈 계약서','',"pickKidFor('openContract')",1)}
       ${tile('🎖️','성장 앨범','',"pickKidFor('openAlbum')",1)}
       ${tile('🧒','자녀 화면','',"pickKidFor('openKidAccess')",1)}
-      ${tile('👵','조부모 초대','',"openMore('gp')",1)}
       ${tile('💸','용돈 받을 곳',payOn?'등록됨':'','openPaySettings()',1)}
       ${tile('📊','예상 용돈','',"openMore('est')")}
       ${tile('⭐','플러스',pl.purchased?'구매 완료':pl.promo?'무료 체험 중':'','openPlusPage()')}
       ${tile('💾','백업·초기화','',"openMore('backup')")}
       ${tile('📄','정보·문의','',"openMore('info')")}
+      ${tile('🗑️','가족 데이터 삭제','','openDestroyFamily()')}
     </div>
     <div class="ver">용돈 받아라 ${APP_VERSION}</div>`;
   $('view').innerHTML=h;
@@ -856,13 +856,6 @@ function openMore(what){
   if(what==='account'){
     const a=accountCardHtml();
     return openModal((a||`<h3>🔐 Google 계정</h3><div class="muted">${S.demo?'예시 자료에서는 쓸 수 없어요. 「내 자녀로 시작하기」 후에 연결해 보세요.':'지금은 쓸 수 없어요.'}</div>`)+close);
-  }
-  if(what==='gp'){
-    if(!S.family) return openModal(`<h3>👵 할머니·할아버지 초대 ${plusTag()}</h3>
-      <div>조부모님이 손주의 실천과 통장을 보고, 응원 메시지와 용돈을 보낼 수 있어요.</div>
-      <div class="tip">먼저 「가족 연결」에서 가족을 만들어야 초대 링크를 보낼 수 있어요.</div>
-      <button class="btn full" style="background:var(--green)" onclick="openMore('family')">가족 연결하러 가기</button>${close}`);
-    return shareGpInvite();
   }
   if(what==='est') return openModal(`<h3>📊 한 달 예상 용돈</h3>${estHtml()}
     <div class="muted" style="margin-top:6px">매일 항목 × 30일 + 매주 항목 × 4.3주 기준(벌금 제외)</div>${close}`);
@@ -951,31 +944,25 @@ function familyCardHtml(){
   let h=`<div class="card"><div class="jua" style="font-size:18px">👨‍👩‍👧 가족과 함께 쓰기</div>`;
   if(!Sync.available()) return h+`<div class="muted" style="margin-top:4px">가족 동기화는 준비 중이에요.</div></div>`;
   if(S.demo) return h+`<div class="muted" style="margin-top:4px">예시 자료에서는 쓸 수 없어요. 「내 자녀로 시작하기」 후에 엄마·아빠 휴대폰을 연결해 보세요.</div></div>`;
-  if(!S.family) return h+`<div class="muted" style="margin-top:4px">엄마·아빠 휴대폰을 연결하면 누가 체크하든 같은 통장을 함께 봐요. 이 휴대폰에서 가족을 만들고, 나온 코드를 다른 휴대폰에 입력하세요.</div>
-    <button class="btn full" style="background:var(--green)" onclick="askCreateFamily()">가족 만들기 (코드 받기)</button>
+  if(!S.family) return h+`<div class="muted" style="margin-top:4px">엄마·아빠·자녀·조부모 휴대폰을 가족 코드로 연결하면 누가 체크하든 같은 통장을 함께 봐요.</div>
+    <div class="tip">가족을 만들면 이 휴대폰의 기록이 동기화 서버(Google Firebase)에 올라가요. 가족 코드를 아는 휴대폰만 볼 수 있으니 코드는 가족끼리만 나눠 주세요.</div>
+    <button class="btn full" style="background:var(--green)" id="cfBtn" onclick="doCreateFamily()">가족 만들기 (코드 받기)</button>
     <button class="btn full ghost" onclick="askJoinFamily()">다른 휴대폰의 가족 코드 입력하기</button></div>`;
-  return h+`<div class="muted" style="margin-top:4px">이 코드를 다른 부모님 휴대폰의 앱에 입력하면 함께 쓸 수 있어요.</div>
+  return h+`<div class="muted" style="margin-top:4px">이 코드를 다른 가족 휴대폰의 앱에 입력하면 함께 쓸 수 있어요. 아래 버튼으로 초대 링크를 보내도 돼요.</div>
     <div class="code">${esc(Sync.shareCode(S.family))}</div>
     <div class="muted" id="syncStatus">${statusHtml()}</div>
+    ${keepRecordsHtml()}
     <button class="btn full" style="background:var(--green)" onclick="shareFamilyCode()">💬 가족 초대 보내기 (앱 설치 링크 포함)</button>
+    <div class="muted" style="margin-top:4px">📱 휴대폰을 바꿨다면: 가족의 다른 휴대폰에서 이 버튼으로 새 휴대폰에 링크를 보내면, 누르기만 해도 기록이 그대로 들어와요.</div>
     <button class="btn full" style="background:#4D96FF" onclick="pickKidFor('openKidAccess')">🧒 자녀 휴대폰 초대하기 ${plusTag()}</button>
     <div class="muted" style="margin-top:4px">자녀 휴대폰에는 광고 없는 자녀 화면(오늘 할 일·내 통장·내 목표)만 보여요. 링크 대신 위 가족 코드를 자녀 휴대폰 첫 화면에 넣어도 돼요.</div>
     <button class="btn full" style="background:#B07CE8" onclick="shareGpInvite()">👵 할머니·할아버지 초대하기 ${plusTag()}</button>
-    <button class="btn full ghost" onclick="askLeaveFamily()">이 휴대폰 연결 끊기</button>
-    <button class="btn full ghost" style="color:var(--red)" onclick="askDestroyFamily()">가족 데이터 서버에서 모두 삭제</button></div>`;
-}
-function askCreateFamily(){
-  openModal(`<h3>👨‍👩‍👧 가족 만들기</h3>
-    <div>이 휴대폰의 자녀·항목·통장 기록을 동기화 서버(Google Firebase)에 올리고 가족 코드를 만들어요.</div>
-    <div class="tip">가족 코드를 아는 휴대폰만 기록을 볼 수 있어요. 코드는 가족끼리만 나눠 주세요. 자녀 이름은 별명으로 써도 돼요.</div>
-    <button class="btn full" style="background:var(--green)" id="cfBtn" onclick="doCreateFamily()">가족 만들기</button>
-    <button class="btn full ghost" onclick="closeModal()">취소</button>`);
+    <button class="btn full ghost" onclick="askLeaveFamily()">이 휴대폰 연결 끊기</button></div>`;
 }
 function doCreateFamily(){
   $('cfBtn').disabled=true; $('cfBtn').textContent='만드는 중…';
-  Sync.create().then(code=>{S.family=code.replace('-','');closeModal();renderManage();toast('가족을 만들었어요! 이제 초대를 보내 보세요');
-      setTimeout(shareFamilyCode,600)})
-    .catch(e=>{$('cfBtn').disabled=false;$('cfBtn').textContent='가족 만들기';toast(errMsg(e))});
+  Sync.create().then(code=>{S.family=code.replace('-','');renderManage();openMore('family');toast('가족을 만들었어요! 가족 코드를 알려 주거나 초대를 보내 보세요')})
+    .catch(e=>{$('cfBtn').disabled=false;$('cfBtn').textContent='가족 만들기 (코드 받기)';toast(errMsg(e))});
 }
 function askJoinFamily(){
   openModal(`<h3>가족 코드 입력하기</h3>
@@ -1042,6 +1029,14 @@ function askLeaveNormal(n){
     <div class="muted" style="margin-top:6px">지금까지의 기록은 이 휴대폰에 남지만, 앞으로는 서로 맞춰지지 않아요.</div>
     <button class="btn full red" id="lfBtn" onclick="this.disabled=true;Sync.leave().then(()=>call('getInitData')).then(d=>{applyInit(d);closeModal();renderManage();toast('연결을 끊었어요')}).catch(e=>{this.disabled=false;toast(errMsg(e))})">연결 끊기</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
+}
+/* 더보기 「가족 데이터 삭제」: 가족 연결이 있을 때만 서버 삭제 창, 없으면 안내 */
+function openDestroyFamily(){
+  if(S.family) return askDestroyFamily();
+  openModal(`<h3>🗑️ 가족 데이터 삭제</h3>
+    <div>${S.demo?'예시 자료에서는 쓸 수 없어요.':'지금은 가족 연결이 없어서 서버에 저장된 가족 데이터가 없어요.'}</div>
+    <div class="muted" style="margin-top:6px">이 휴대폰의 기록만 지우려면 「백업·초기화 → 모든 기록 지우고 처음부터」를 써 주세요.</div>
+    <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
 }
 function askDestroyFamily(){
   openModal(`<h3>가족 데이터 모두 삭제</h3>
