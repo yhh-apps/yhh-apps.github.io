@@ -3,7 +3,9 @@
 'use strict';
 
 /* ---------- 플러스 상태·안내 ---------- */
-function plusTag(){return '<span class="plustag">⭐ 플러스</span>'}
+// 플러스 표시: 체험 중이거나 아직 안 산 사람에게는 보이고, 구매하면 사라짐
+function plusTag(){return S.plus&&S.plus.purchased?'':'<span class="plustag">⭐ 플러스</span>'}
+function plusStar(){return S.plus&&S.plus.purchased?'':' <span class="plusstar">⭐</span>'}
 function promoText(){
   const p=S.plus||{};
   if(p.purchased) return p.family?'✅ 우리 가족 모두 플러스를 쓰고 있어요 (구매 완료)':'✅ 플러스 구매 완료 · 추가 결제 없이 계속 써요';
@@ -21,12 +23,12 @@ function plusCardHtml(){
   </div>`;
 }
 const PLUS_FEATURES=[
-  ['🏦','엄마·아빠 은행 이자','모아 둔 돈에 매달 이자가 붙어요. "쓰지 않고 모으면 돈이 불어난다"는 걸 아이가 직접 느껴요.'],
+  ['🏦','엄마·아빠 은행 이자','모아 둔 돈에 매달 이자가 붙어요. "쓰지 않고 모으면 돈이 불어난다"는 걸 자녀가 직접 느껴요.'],
   ['🫙','세 개의 통장','들어온 용돈을 쓰기·저축·나눔으로 자동으로 나눠요. 돈을 목적에 맞게 나누는 습관이 생겨요.'],
-  ['📜','용돈 계약서','실천 약속·벌금·용돈 쓰는 규칙을 아이와 함께 정하고, 손가락으로 서명해 출력해요.'],
+  ['📜','용돈 계약서','실천 약속·벌금·용돈 쓰는 규칙을 자녀와 함께 정하고, 손가락으로 서명해 출력해요.'],
   ['🎖️','성장 앨범','한 달·한 해 동안의 실천 횟수, 최장 연속 기록, 저축·나눔을 예쁜 카드로 남겨요.'],
   ['👵','할머니·할아버지 초대','조부모님이 손주의 습관을 보고 응원 메시지와 용돈을 보내요. 카카오페이·토스 송금 화면이 바로 열려요.'],
-  ['🧒','아이가 직접 참여','아이가 실천하고 사진과 함께 「했어요!」를 보내면 엄마·아빠가 승인해요. 저축·소비 목표도 아이가 정해요.']
+  ['🧒','자녀가 직접 참여','자녀가 실천하고 사진과 함께 「했어요!」를 보내면 엄마·아빠가 승인해요. 저축·소비 목표도 자녀가 정해요.']
 ];
 function openPlusPage(){
   const p=S.plus||{};
@@ -48,13 +50,13 @@ function buyPlus(){
   toast('결제는 Play 스토어 출시와 함께 열려요');
 }
 
-/* ---------- 아이별 플러스 설정 (이자·세 개의 통장) ---------- */
+/* ---------- 자녀별 플러스 설정 (이자·세 개의 통장) ---------- */
 const JAR_PRESETS=[[60,30,10],[50,40,10],[70,20,10],[40,50,10]];
 function kidPlusFields(k){
   const on=!!(S.plus&&S.plus.active), r=Number(k.interestRate)||0, j=k.jars&&k.jars.on?k.jars:null;
   const jv=j||{spend:60,save:30,give:10};
   return `<div class="plusbox">
-    <div class="row"><b>⭐ 플러스 기능</b>${on?'':'<button class="del" onclick="openPlusPage()">플러스 알아보기</button>'}</div>
+    <div class="row"><b>${S.plus&&S.plus.purchased?'💰 이자 · 세 개의 통장':'⭐ 플러스 기능'}</b>${on?'':'<button class="del" onclick="openPlusPage()">플러스 알아보기</button>'}</div>
     <label class="f">🏦 엄마·아빠 은행 이자 (매달 1일, 지난달 말 ${j?'저축 통장':'잔액'} 기준)</label>
     <select id="kRate" ${on?'':'disabled'} onchange="ratePreview()">${[0,1,2,3,5].map(x=>`<option value="${x}" ${r===x?'selected':''}>${x?('월 '+x+'%'):'끄기'}</option>`).join('')}</select>
     <div class="muted" id="ratePv" style="margin-top:4px">${ratePreviewText(r)}</div>
@@ -86,12 +88,12 @@ function kidPlusBadges(k){
   const b=[];
   if(Number(k.interestRate)>0) b.push(`<span class="badge">🏦 이자 월 ${k.interestRate}%</span>`);
   if(k.jars&&k.jars.on) b.push(`<span class="badge">🫙 ${k.jars.spend}/${k.jars.save}/${k.jars.give}</span>`);
-  // 줄 전체를 누르면 아이 수정 창이 열리므로, 바로가기 칩은 그 클릭이 위로 전달되지 않게 막음
+  // 줄 전체를 누르면 자녀 수정 창이 열리므로, 바로가기 칩은 그 클릭이 위로 전달되지 않게 막음
   return `${b.length?`<div style="margin-top:4px">${b.join('')}</div>`:''}
     <div class="kchips">
-    <button class="kchip" onclick="event.stopPropagation();openContract('${k.id}')">📜 계약서</button>
-    <button class="kchip" onclick="event.stopPropagation();openAlbum('${k.id}')">🎖️ 앨범</button>
-    <button class="kchip" onclick="event.stopPropagation();openKidAccess('${k.id}')">🧒 아이 화면</button></div>`;
+    <button class="kchip" onclick="event.stopPropagation();openContract('${k.id}')">📜 계약서${plusStar()}</button>
+    <button class="kchip" onclick="event.stopPropagation();openAlbum('${k.id}')">🎖️ 앨범${plusStar()}</button>
+    <button class="kchip" onclick="event.stopPropagation();openKidAccess('${k.id}')">🧒 자녀 화면${plusStar()}</button></div>`;
 }
 
 /* ---------- 📜 용돈 계약서 ---------- */
@@ -113,7 +115,7 @@ function openContract(kidId){
     call('getContract',kidId).then(c=>{
       if(!c) return openPlusPage();
       const x=S.contract=contractParts(kidId); S.contract.saved=c;
-      openModal(`<h3>📜 ${esc(x.k.name)}의 용돈 계약서</h3>
+      openModal(`<h3>📜 ${esc(callName(x.k.name))}의 용돈 계약서</h3>
         <div class="contract" id="contractBody">${contractHtml(x.k,x.good,x.bad,x.rules,c,false)}</div>
         <div class="muted" style="margin-top:6px">계약서를 고치거나 새로 쓰려면 ⭐ 플러스가 필요해요.</div>
         <button class="btn full ghost" onclick="printSavedContract()">🖨️ 인쇄 · PDF로 저장</button>
@@ -125,7 +127,7 @@ function openContract(kidId){
   call('getContract',kidId).then(c=>{
     c=c||{};
     const x=S.contract=contractParts(kidId), k=x.k, good=x.good, bad=x.bad, rules=x.rules;
-    openModal(`<h3>📜 ${esc(k.name)}의 용돈 계약서</h3>
+    openModal(`<h3>📜 ${esc(callName(k.name))}의 용돈 계약서</h3>
       <div class="contract" id="contractBody">${contractHtml(k,good,bad,rules,c,true)}</div>
       <label class="f">💰 용돈 정산일</label><input id="cPay" value="${esc(c.payday||'매주 일요일 저녁')}" placeholder="예: 매주 일요일 저녁">
       <label class="f">🤝 특별 약속 (선택)</label><textarea id="cSpecial" placeholder="예: 게임은 숙제를 끝낸 뒤 30분만 해요">${esc(c.special||'')}</textarea>
@@ -203,7 +205,7 @@ function rangeLabel(range){return range==='month'?Number(S.today.slice(5,7))+'�
 function albumHtml(a,range){
   const k=a.kid, stat=(ico,label,val)=>`<div class="astat"><div class="aico">${ico}</div><div class="aval">${val}</div><div class="alab">${label}</div></div>`;
   return `<div class="album">
-    <div class="ahead"><div class="aemoji">${esc(k.emoji)}</div><div><div class="jua" style="font-size:22px">${esc(k.name)}의 ${rangeLabel(range)} 성장 앨범</div>
+    <div class="ahead"><div class="aemoji">${esc(k.emoji)}</div><div><div class="jua" style="font-size:22px">${esc(callName(k.name))}의 ${rangeLabel(range)} 성장 앨범</div>
       <div class="muted">${esc(a.from==='2000-01-01'?'처음부터':a.from)} ~ ${esc(a.to)}</div></div></div>
     <div class="agrid">
       ${stat('✅','실천',a.checks+'번')}${stat('📅','실천한 날',a.activeDays+'일')}${stat('🔥','최장 연속',a.bestStreak+'일')}
@@ -224,7 +226,7 @@ function albumMessage(a){
 }
 function shareAlbum(){
   const x=S.album, a=x.a, k=a.kid, L=[];
-  L.push(`🎖️ ${k.emoji} ${k.name}의 ${rangeLabel(x.range)} 성장 앨범`,'');
+  L.push(`🎖️ ${k.emoji} ${callName(k.name)}의 ${rangeLabel(x.range)} 성장 앨범`,'');
   L.push(`✅ 실천 ${a.checks}번 · 📅 ${a.activeDays}일 · 🔥 최장 ${a.bestStreak}일 연속`);
   L.push(`💰 실천으로 번 돈 ${won(a.earned)}${a.interest?` · 🏦 이자 ${won(a.interest)}`:''}${a.bonus?` · 🎁 보너스 ${won(a.bonus)}`:''}`);
   if(a.saved||a.gave) L.push(`🫙 저축 ${won(a.saved)} · 💝 나눔 ${won(a.gave)}`);
@@ -237,7 +239,7 @@ function shareAlbum(){
 const CHEER_IDEAS=['꾸준히 실천하는 모습이 정말 멋지다!','할머니·할아버지가 많이 사랑해 ❤️','저금 목표까지 화이팅! 💪','오늘도 스스로 해냈구나, 최고야 👍'];
 function openCheer(){
   const k=kid();
-  openModal(`<h3>💌 ${esc(k.name)}에게 응원 보내기</h3>
+  openModal(`<h3>💌 ${esc(callName(k.name))}에게 응원 보내기</h3>
     <label class="f">보내는 사람</label><input id="chFrom" value="${esc(S.gpName||'')}" placeholder="예: 할머니">
     <label class="f">응원 메시지</label><textarea id="chMsg" placeholder="손주에게 하고 싶은 말"></textarea>
     <div class="chips" style="margin-top:6px">${CHEER_IDEAS.map((c,i)=>`<button type="button" onclick="$('chMsg').value=CHEER_IDEAS[${i}]">${esc(c)}</button>`).join('')}</div>
@@ -263,7 +265,7 @@ function shareGpInvite(){
   if(!requirePlus()) return;
   const names=S.kids.map(k=>k.name).join('·');
   previewShare(`[용돈 받아라] 할머니·할아버지 초대 👵👴
-${names}의 습관 실천과 용돈 통장을 함께 보고, 응원 메시지와 용돈을 보내 주세요!
+${callName(names)}의 습관 실천과 용돈 통장을 함께 보고, 응원 메시지와 용돈을 보내 주세요!
 
 ① 아래 링크를 눌러 앱을 열어 주세요
 ${appUrl()}?join=${S.family}&gp=1
@@ -292,7 +294,7 @@ function doGpJoin(code){
   const btn=$('gpBtn'); btn.disabled=true; btn.textContent='손주 통장 받는 중…';
   Sync.join(code).then(()=>call('setRole','gp',name)).then(d=>{
     applyInit(d);
-    if(!d.ready){toast('아직 등록된 아이가 없어요');btn.disabled=false;return}
+    if(!d.ready){toast('아직 등록된 자녀가 없어요');btn.disabled=false;return}
     S.tab='check';S.date=null;S.month=null;
     document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab==='check'));
     startMain(); toast(`${name}, 환영해요! 👵`);
@@ -305,7 +307,7 @@ function renderGpManage(){
       <button class="btn full ghost" onclick="call('setRole','gp',$('gpNameEdit').value).then(d=>{applyInit(d);toast('바꿨어요')})">이름 바꾸기</button></div>
     ${familyCardHtml()}
     <div class="card"><div class="jua" style="font-size:18px">ℹ️ 앱 정보</div>
-      <div style="margin-top:8px"><a href="privacy.html">개인정보처리방침</a></div>
+      <div style="margin-top:8px"><a href="privacy.html" target="_blank" rel="noopener">개인정보처리방침</a></div>
       <button class="btn full ghost" onclick="askBeParent()">이 휴대폰을 부모 모드로 바꾸기</button></div>`;
 }
 function askBeParent(){
@@ -319,6 +321,6 @@ function plusShortcutsHtml(){
   if(viewOnly()) return '';
   const k=kid();
   return `<div class="row" style="gap:8px;margin-top:12px">
-    <button class="btn ghost" style="flex:1" onclick="openContract('${k.id}')">📜 용돈 계약서 ${S.plus.active?'':'⭐'}</button>
-    <button class="btn ghost" style="flex:1" onclick="openAlbum('${k.id}')">🎖️ 성장 앨범 ${S.plus.active?'':'⭐'}</button></div>`;
+    <button class="btn ghost" style="flex:1" onclick="openContract('${k.id}')">📜 용돈 계약서${plusStar()}</button>
+    <button class="btn ghost" style="flex:1" onclick="openAlbum('${k.id}')">🎖️ 성장 앨범${plusStar()}</button></div>`;
 }

@@ -1,4 +1,4 @@
-/* 용돈 받아라 — 👧 아이 참여(아이 화면·인증 요청·승인)와 💸 조부모 용돈 송금 연결 (플러스)
+/* 용돈 받아라 — 👧 자녀 참여(자녀 화면·인증 요청·승인)와 💸 조부모 용돈 송금 연결 (플러스)
    app.js보다 먼저 불러옴 — 함수만 정의. 데이터는 store.js의 call() */
 'use strict';
 
@@ -8,7 +8,7 @@ function viewOnly(){return S.role==='gp'||S.role==='kid'}
 /* ---------- 탭 이름: 역할에 따라 ---------- */
 function setTabLabels(){
   const L=isKid()?{check:['✅','오늘 할 일'],ledger:['📒','내 통장'],manage:['🎯','내 목표']}
-    :{check:['✅','실천 체크'],ledger:['📒','통장'],items:['🧩','아이·항목'],manage:['⚙️','설정']};
+    :{check:['✅','실천 체크'],ledger:['📒','통장'],items:['🧩','자녀·항목'],manage:['☰','더보기']};
   if(viewOnly()){ delete L.items; if(S.tab==='items') S.tab='manage'; }
   document.querySelectorAll('.tab').forEach(b=>{
     const l=L[b.dataset.tab]; b.classList.toggle('hide',!l);
@@ -17,14 +17,14 @@ function setTabLabels(){
   });
 }
 
-/* ================= 👧 아이 화면 ================= */
+/* ================= 👧 자녀 화면 ================= */
 function renderKidDay(){
   const d=S.day, k=kid();
   const items=d.items.filter(i=>i.amount>=0), fines=d.items.filter(i=>i.amount<0);
   const pend=id=>d.requests.filter(r=>r.itemId===id&&r.status==='pending').length;
   const rejected=d.requests.filter(r=>r.status==='rejected');
   let h=`<div class="card kidhead">
-    <div class="jua" style="font-size:22px">${esc(k.emoji)} ${esc(k.name)}의 통장</div>
+    <div class="jua" style="font-size:22px">${esc(k.emoji)} ${esc(callName(k.name))}의 통장</div>
     <div class="bal ${d.balance<0?'minus':''}">${won(d.balance)}</div>
     ${jarsHtml(d.jars)}${interestHtml(d)}${goalHtml(k,d.balance)}${spendGoalHtml(d.spendGoal)}
   </div>`;
@@ -99,7 +99,7 @@ function sendDidIt(itemId){
   }).catch(e=>{$('didBtn').disabled=false;toast(errMsg(e))});
 }
 
-/* 아이: 내 목표 */
+/* 자녀: 내 목표 */
 function renderKidGoals(){
   const k=kid();
   $('view').innerHTML=`<div class="card"><div class="jua" style="font-size:20px">🎯 내 목표 정하기</div>
@@ -127,7 +127,7 @@ function askExitKid(){
 /* ================= 👨‍👩‍👧 부모: 승인 ================= */
 function pendingBannerHtml(){
   if(isKid()||isGp()||!S.pendingCount) return '';
-  return `<div class="pendbar" onclick="openApprovals()">📸 아이가 보낸 실천 인증 <b>${S.pendingCount}건</b> — 확인하기 ›</div>`;
+  return `<div class="pendbar" onclick="openApprovals()">📸 자녀가 보낸 실천 인증 <b>${S.pendingCount}건</b> — 확인하기 ›</div>`;
 }
 const PHOTO_OK=/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
 function openApprovals(){
@@ -151,27 +151,27 @@ function approveReq(id){
 }
 const REJECT_REASONS=['사진이 잘 안 보여요','아직 덜 했어요','함께 다시 해 보자'];
 function askReject(id){
-  openModal(`<h3>다시 해 보자</h3><div class="muted">아이에게 보여 줄 이유를 골라 주세요.</div>
+  openModal(`<h3>다시 해 보자</h3><div class="muted">자녀에게 보여 줄 이유를 골라 주세요.</div>
     <div class="chips" style="margin-top:8px">${REJECT_REASONS.map((x,i)=>`<button type="button" onclick="$('rjWhy').value=REJECT_REASONS[${i}]">${esc(x)}</button>`).join('')}</div>
     <input id="rjWhy" placeholder="직접 쓰기">
-    <button class="btn full" onclick="call('rejectRequest','${id}',$('rjWhy').value).then(()=>{toast('아이에게 알려 줬어요');refreshCounts().then(openApprovals)}).catch(e=>toast(errMsg(e)))">보내기</button>
+    <button class="btn full" onclick="call('rejectRequest','${id}',$('rjWhy').value).then(()=>{toast('자녀에게 알려 줬어요');refreshCounts().then(openApprovals)}).catch(e=>toast(errMsg(e)))">보내기</button>
     <button class="btn full ghost" onclick="openApprovals()">뒤로</button>`);
 }
 function refreshCounts(){return call('getInitData').then(d=>{applyInit(d)})}
 
-/* 부모: 아이 화면 설정 (동의 → 아이 기기 초대 / 이 폰을 아이 모드로) */
+/* 부모: 자녀 화면 설정 (동의 → 자녀 기기 초대 / 이 폰을 자녀 모드로) */
 function openKidAccess(kidId){
   if(!requirePlus()) return;
   const k=S.kids.find(x=>x.id===kidId);
-  openModal(`<h3>🧒 ${esc(k.name)}의 아이 화면</h3>
-    <div>아이가 직접 실천하고 「📸 했어요!」를 보내면, 엄마·아빠가 확인하고 승인해요. 저축·소비 목표도 아이가 정할 수 있어요.</div>
+  openModal(`<h3>🧒 ${esc(callName(k.name))}의 자녀 화면</h3>
+    <div>자녀가 직접 실천하고 「📸 했어요!」를 보내면, 엄마·아빠가 확인하고 승인해요. 저축·소비 목표도 자녀가 정할 수 있어요.</div>
     ${k.consentAt?`<div class="tip">✅ 보호자 동의 완료 (${esc(k.consentAt)})</div>`:`<div class="warn">
-      <b>보호자 동의</b><br>아이가 찍은 실천 사진은 작게 줄여 가족 서버(Google Firebase)를 거쳐 부모 휴대폰에 보이고, <b>승인하거나 반려하면 바로 지워져요.</b>
-      사진은 다른 목적으로 쓰지 않아요. 만 14세 미만 아이의 사진이라 법정대리인인 보호자의 동의가 필요해요.
+      <b>보호자 동의</b><br>자녀가 찍은 실천 사진은 작게 줄여 가족 서버(Google Firebase)를 거쳐 부모 휴대폰에 보이고, <b>승인하거나 반려하면 바로 지워져요.</b>
+      사진은 다른 목적으로 쓰지 않아요. 만 14세 미만 자녀의 사진이라 법정대리인인 보호자의 동의가 필요해요.
       <label class="ck"><input type="checkbox" id="kcOk"> 보호자로서 위 내용에 동의해요</label></div>`}
-    <button class="btn full" style="background:var(--green)" onclick="kidInvite('${kidId}')">📱 아이 휴대폰·태블릿 초대 링크 보내기</button>
-    <button class="btn full ghost" onclick="kidModeHere('${kidId}')">이 휴대폰을 아이 모드로 바꾸기</button>
-    <div class="muted" style="margin-top:6px">아이 모드에서 부모 화면으로 돌아올 때는 앱 잠금 비밀번호를 입력해요.</div>
+    <button class="btn full" style="background:var(--green)" onclick="kidInvite('${kidId}')">📱 자녀 휴대폰·태블릿 초대 링크 보내기</button>
+    <button class="btn full ghost" onclick="kidModeHere('${kidId}')">이 휴대폰을 자녀 모드로 바꾸기</button>
+    <div class="muted" style="margin-top:6px">자녀 모드에서 부모 화면으로 돌아올 때는 앱 잠금 비밀번호를 입력해요.</div>
     <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
 }
 function ensureConsent(kidId){
@@ -182,25 +182,25 @@ function ensureConsent(kidId){
 }
 function kidInvite(kidId){
   ensureConsent(kidId).then(()=>{
-    if(!S.family){toast('먼저 설정에서 「가족 만들기」를 해 주세요');return}
+    if(!S.family){toast('먼저 「더보기 → 가족 연결」에서 「가족 만들기」를 해 주세요');return}
     const k=S.kids.find(x=>x.id===kidId);
-    previewShare(`[용돈 받아라] ${k.name}의 아이 화면 🧒
-${k.name}(이)가 스스로 실천하고 「했어요!」를 보내는 화면이에요.
+    previewShare(`[용돈 받아라] ${callName(k.name)}의 자녀 화면 🧒
+${callName(k.name)}가 스스로 실천하고 「했어요!」를 보내는 화면이에요.
 
-① 아이 휴대폰·태블릿에서 아래 링크를 열어 주세요
+① 자녀 휴대폰·태블릿에서 아래 링크를 열어 주세요
 ${appUrl()}?join=${S.family}&kid=${kidId}
 
-② 크롬 메뉴(⋮) → 「앱 설치」를 누르면 아이 기기에 앱이 생겨요
+② 크롬 메뉴(⋮) → 「앱 설치」를 누르면 자녀 기기에 앱이 생겨요
 
-③ 「${k.name} 화면 시작하기」를 누르면 끝!`,'아이 기기 초대 보내기',true);
+③ 「${k.name} 화면 시작하기」를 누르면 끝!`,'자녀 기기 초대 보내기',true);
   }).catch(()=>{});
 }
 function kidModeHere(kidId){
   ensureConsent(kidId).then(()=>call('setKidRole',kidId,true)).then(d=>{
-    applyInit(d); closeModal(); setTab('check'); toast('아이 모드예요! 「했어요!」를 눌러 보세요');
+    applyInit(d); closeModal(); setTab('check'); toast('자녀 모드예요! 「했어요!」를 눌러 보세요');
   }).catch(e=>{if(e)toast(errMsg(e))});
 }
-/* 아이 기기: 초대 링크로 처음 열었을 때 */
+/* 자녀 기기: 초대 링크로 처음 열었을 때 */
 function renderKidSetup(code,kidId){
   $('tabs').classList.add('hide'); $('kids').innerHTML='';
   $('view').innerHTML=`<div class="card center">
@@ -236,7 +236,7 @@ function openPaySettings(){
     <label class="f">은행 (토스·계좌 복사용)</label><input id="pyB" value="${esc(p.bank)}" placeholder="예: 카카오뱅크">
     <label class="f">계좌번호</label><input id="pyA" value="${esc(p.account)}" inputmode="numeric" placeholder="숫자만">
     <label class="f">예금주</label><input id="pyH" value="${esc(p.holder)}" placeholder="예: 홍길동">
-    <div class="tip">계좌번호는 같은 가족 코드로 연결된 휴대폰(엄마·아빠·조부모·아이)에만 저장돼요.</div>
+    <div class="tip">계좌번호는 같은 가족 코드로 연결된 휴대폰(엄마·아빠·조부모·자녀)에만 저장돼요.</div>
     <button class="btn full" onclick="call('setPay',{kakao:$('pyK').value,bank:$('pyB').value,account:$('pyA').value,holder:$('pyH').value}).then(d=>{applyInit(d);closeModal();renderManage();toast('저장했어요')}).catch(e=>toast(errMsg(e)))">저장</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
 }

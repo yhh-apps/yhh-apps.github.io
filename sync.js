@@ -137,8 +137,8 @@
   /** 이 휴대폰의 기록으로 새 가족 만들기 → 가족 코드 */
   async function create() {
     const snap = await Store.snapshot();
-    if (!snap || !snap.ready) throw new Error('먼저 아이를 등록해 주세요.');
-    if (snap.demo) throw new Error('예시 자료로는 가족을 만들 수 없어요. 「내 아이로 시작하기」 후 해 주세요.');
+    if (!snap || !snap.ready) throw new Error('먼저 자녀를 등록해 주세요.');
+    if (snap.demo) throw new Error('예시 자료로는 가족을 만들 수 없어요. 「내 자녀로 시작하기」 후 해 주세요.');
     if (snap.sync) throw new Error('이미 가족과 연결되어 있어요.');
     await ready();
     let code = null;
@@ -295,7 +295,7 @@
     catch (e) { throw authFriendly(e); }
     const doc = await userRef().get();
     if (!doc.exists || !doc.data().familyId) {
-      throw new Error('이 Google 계정에 연결된 가족 기록이 없어요. 쓰던 휴대폰에서 「설정 → Google 계정 연결」을 먼저 해 주세요.');
+      throw new Error('이 Google 계정에 연결된 가족 기록이 없어요. 쓰던 휴대폰에서 「더보기 → Google 계정」을 먼저 해 주세요.');
     }
     const r = await afterGoogleSignIn(null);
     if (!r.restored) throw new Error('가족 기록을 찾지 못했어요. 가족 데이터가 삭제되었을 수 있어요.');

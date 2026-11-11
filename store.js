@@ -136,7 +136,7 @@
     }
     return false;
   }
-  function needPlus_() { if (!plus_().active) throw new Error('플러스 기능이에요. 「아이·항목」 탭의 용돈 받아라 플러스에서 시작해 주세요.'); }
+  function needPlus_() { if (!plus_().active) throw new Error('플러스 기능이에요. 「자녀·항목」 탭의 용돈 받아라 플러스에서 시작해 주세요.'); }
 
   /** 세 개의 통장 잔액 — 들어온 돈(실천·보너스)을 비율대로 나누고, 이자는 저축 통장, 쓴 돈은 고른 통장에서 뺌 */
   function jarOf_(s) { return JARS.indexOf(s.jar) >= 0 ? s.jar : (s.method === TRANSFER ? 'save' : 'spend'); }
@@ -201,14 +201,14 @@
   ];
   const EMOJIS = ['🐯', '🐰', '🐻', '🦊', '🐼'];
 
-  /** 첫 실행: 아이 이름들로 시작 (기본 항목은 모든 아이 공통) */
+  /** 첫 실행: 자녀 이름들로 시작 (기본 항목은 모든 자녀 공통) */
   function setupApp(kidNames) {
     if (D && D.kids.length && !D.demo) throw new Error('이미 시작했어요.');
     return setupApp_(kidNames);
   }
   function setupApp_(kidNames) {
     const names = (kidNames || []).map(str_).filter(Boolean).slice(0, 10);
-    if (!names.length) throw new Error('아이 이름을 한 명 이상 입력해 주세요.');
+    if (!names.length) throw new Error('자녀 이름을 한 명 이상 입력해 주세요.');
     D = { v: VERSION, settings: { pin: '' }, kids: [], items: [], records: [], spends: [], requests: [], meta: [], createdAt: now_() };
     names.forEach((n, i) => D.kids.push({ id: newId_('k'), name: n, desc: '', emoji: EMOJIS[i % EMOJIS.length], goalName: '', goalAmount: 0, order: i + 1 }));
     DEFAULT_ITEMS.forEach((r, i) => D.items.push({ id: newId_('i'), name: r[0], meaning: r[1], amount: r[2], period: r[3], target: 'ALL', active: true, order: i + 1, maxCount: DEFAULT_MAX }));
@@ -231,7 +231,7 @@
     };
   }
 
-  /** 예시 아이 2명 + 최근 4주 기록으로 둘러보기 (D.demo = true) */
+  /** 예시 자녀 2명 + 최근 4주 기록으로 둘러보기 (D.demo = true) */
   function loadDemo() {
     if (D && D.kids.length && !D.demo) throw new Error('이미 사용 중인 기록이 있어요.');
     setupApp_(['하준', '서아']);
@@ -298,7 +298,7 @@
       methods: METHODS,
       hasPin: !!(D && D.settings.pin),
       plus: plus_(),
-      role: role_(), // 이 휴대폰의 역할: parent / gp(조부모: 보기·응원) / kid(아이: 했어요 요청·내 목표) — 기기마다
+      role: role_(), // 이 휴대폰의 역할: parent / gp(조부모: 보기·응원) / kid(자녀: 했어요 요청·내 목표) — 기기마다
       kidRole: D && D.settings.role === 'kid' ? { kidId: D.settings.kidId, fromParent: !!D.settings.kidFromParent } : null,
       pendingCount: D ? D.requests.filter(r => r.status === 'pending').length : 0,
       pay: D ? payInfo_() : null,
@@ -379,7 +379,7 @@
     if (!name) throw new Error('무엇을 샀는지 입력해 주세요.');
     if (amount <= 0) throw new Error('금액을 확인해 주세요.');
     if (date > today_()) throw new Error('미래 날짜로는 기록할 수 없어요.');
-    if (!hasKid_(kidId)) throw new Error('아이를 확인해 주세요.');
+    if (!hasKid_(kidId)) throw new Error('자녀를 확인해 주세요.');
     const kind = KINDS.indexOf(sp.kind) >= 0 ? sp.kind : '';
     const method = METHODS.indexOf(sp.method) >= 0 ? sp.method : '카드';
     const row = { id: newId_('s'), date: date, kidId: kidId, name: name, amount: amount, kind: kind, memo: str_(sp.memo), ts: now_(), method: method };
@@ -396,7 +396,7 @@
     if (!from) throw new Error('누구에게 받았는지 입력해 주세요.');
     if (amount <= 0) throw new Error('금액을 확인해 주세요.');
     if (date > today_()) throw new Error('미래 날짜로는 기록할 수 없어요.');
-    if (!hasKid_(kidId)) throw new Error('아이를 확인해 주세요.');
+    if (!hasKid_(kidId)) throw new Error('자녀를 확인해 주세요.');
     const name = from + (str_(b.memo) ? ' · ' + str_(b.memo) : '');
     D.records.push({ id: newId_('b'), date: date, kidId: kidId, itemId: BONUS, itemName: name, amount: amount, ts: now_() });
     return getDay(kidId, viewDate);
@@ -415,7 +415,7 @@
     const amount = Math.max(0, Math.floor(num_(c.amount)));
     if (!from) throw new Error('보내는 사람을 입력해 주세요.');
     if (!msg && !amount) throw new Error('응원 메시지를 써 주세요.');
-    if (!hasKid_(kidId)) throw new Error('아이를 확인해 주세요.');
+    if (!hasKid_(kidId)) throw new Error('자녀를 확인해 주세요.');
     const date = today_();
     const name = from + (msg ? ' · ' + msg : '');
     if (amount > 0) D.records.push({ id: newId_('b'), date: date, kidId: kidId, itemId: BONUS, itemName: name, amount: amount, ts: now_() });
@@ -432,35 +432,35 @@
     return getInitData();
   }
 
-  /* ===================== 👧 아이 참여 (플러스) ===================== */
+  /* ===================== 👧 자녀 참여 (플러스) ===================== */
 
-  /** 이 휴대폰을 아이 화면으로 — fromParent: 부모 폰을 잠시 아이 모드로 (돌아갈 때 비밀번호) */
+  /** 이 휴대폰을 자녀 화면으로 — fromParent: 부모 폰을 잠시 자녀 모드로 (돌아갈 때 비밀번호) */
   function setKidRole(kidId, fromParent) {
     need_(); needPlus_();
-    if (!hasKid_(kidId)) throw new Error('아이를 확인해 주세요.');
-    if (fromParent && !D.settings.pin) throw new Error('아이 모드에서 부모 화면으로 돌아올 때 쓸 앱 잠금 비밀번호를 먼저 정해 주세요. (설정 → 앱 잠금)');
+    if (!hasKid_(kidId)) throw new Error('자녀를 확인해 주세요.');
+    if (fromParent && !D.settings.pin) throw new Error('자녀 모드에서 부모 화면으로 돌아올 때 쓸 앱 잠금 비밀번호를 먼저 정해 주세요. (더보기 → 앱 잠금)');
     D.settings.role = 'kid'; D.settings.kidId = kidId; D.settings.kidFromParent = !!fromParent;
     return getInitData();
   }
-  /** 아이 모드 끝내기 (부모 폰): 비밀번호 확인 */
+  /** 자녀 모드 끝내기 (부모 폰): 비밀번호 확인 */
   function exitKidRole(pin) {
     need_();
     if (D.settings.role !== 'kid') return getInitData();
-    if (!D.settings.kidFromParent) throw new Error('아이 전용 기기예요.');
+    if (!D.settings.kidFromParent) throw new Error('자녀 전용 기기예요.');
     checkPin_(pin);
     D.settings.role = 'parent'; delete D.settings.kidId; delete D.settings.kidFromParent;
     return getInitData();
   }
-  /** 부모 동의: 아이 기기 초대·사진 인증을 쓰기 전에 한 번 */
+  /** 부모 동의: 자녀 기기 초대·사진 인증을 쓰기 전에 한 번 */
   function setKidConsent(kidId) {
     need_(); needPlus_();
-    const k = D.kids.find(x => x.id === kidId); if (!k) throw new Error('아이를 확인해 주세요.');
+    const k = D.kids.find(x => x.id === kidId); if (!k) throw new Error('자녀를 확인해 주세요.');
     k.consentAt = today_();
     return getInitData();
   }
 
   const PHOTO_RE = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
-  /** 아이: 「했어요!」 요청 (사진 선택) — 부모가 승인하면 체크 */
+  /** 자녀: 「했어요!」 요청 (사진 선택) — 부모가 승인하면 체크 */
   function submitRequest(kidId, itemId, photo, memo) {
     need_(); needPlus_();
     const item = D.items.find(i => i.id === itemId);
@@ -497,7 +497,7 @@
     }
     return listRequests();
   }
-  /** 부모: 반려 → 사진은 바로 지우고 이유만 남김 (아이가 확인하면 삭제) */
+  /** 부모: 반려 → 사진은 바로 지우고 이유만 남김 (자녀가 확인하면 삭제) */
   function rejectRequest(id, reason) {
     need_();
     if (role_() !== 'parent') throw new Error('부모님만 반려할 수 있어요.');
@@ -511,10 +511,10 @@
     D.requests = D.requests.filter(r => !(r.id === id && r.status !== 'pending'));
     return true;
   }
-  /** 아이도 쓸 수 있음: 저축 목표 + 이번 달 '갖고 싶은 것' 소비 목표 */
+  /** 자녀도 쓸 수 있음: 저축 목표 + 이번 달 '갖고 싶은 것' 소비 목표 */
   function setKidGoals(kidId, g) {
     need_();
-    const k = D.kids.find(x => x.id === kidId); if (!k) throw new Error('아이를 확인해 주세요.');
+    const k = D.kids.find(x => x.id === kidId); if (!k) throw new Error('자녀를 확인해 주세요.');
     k.goalName = str_(g.goalName).slice(0, 30);
     k.goalAmount = Math.max(0, Math.floor(num_(g.goalAmount)));
     k.spendGoal = Math.max(0, Math.floor(num_(g.spendGoal)));
@@ -696,7 +696,7 @@
     const maxCount = clampMax_(it.maxCount);
     if (!name) throw new Error('항목 이름을 입력해 주세요.');
     if (amount < -100000 || amount > 100000) throw new Error('금액은 -100,000 ~ 100,000원 사이로 입력해 주세요. (벌금은 마이너스)');
-    if (target !== 'ALL' && !hasKid_(target)) throw new Error('대상 아이를 확인해 주세요.');
+    if (target !== 'ALL' && !hasKid_(target)) throw new Error('대상 자녀를 확인해 주세요.');
     const active = it.active !== false;
     const cur = it.id ? D.items.find(x => x.id === it.id) : null;
     if (cur) {
@@ -744,10 +744,10 @@
     return getInitData();
   }
 
-  /** 아이 삭제 — 그 아이 전용 항목과 모든 기록도 함께 지움 (기기 저장이라 남겨 둘 이유가 없음) */
+  /** 자녀 삭제 — 그 자녀 전용 항목과 모든 기록도 함께 지움 (기기 저장이라 남겨 둘 이유가 없음) */
   function deleteKid(id) {
     need_();
-    if (D.kids.length <= 1) throw new Error('아이가 한 명은 있어야 해요.');
+    if (D.kids.length <= 1) throw new Error('자녀가 한 명은 있어야 해요.');
     D.items = D.items.filter(x => x.target !== id);
     D.kids = D.kids.filter(x => x.id !== id);
     D.records = D.records.filter(r => r.kidId !== id);
@@ -758,7 +758,7 @@
 
   /* ===================== 백업 ===================== */
 
-  function noSync_() { if (D && D.sync && D.sync.familyId) throw new Error('가족 연결 중에는 할 수 없어요. 설정에서 먼저 「이 휴대폰 연결 끊기」를 해 주세요.'); }
+  function noSync_() { if (D && D.sync && D.sync.familyId) throw new Error('가족 연결 중에는 할 수 없어요. 「더보기 → 가족 연결」에서 먼저 「이 휴대폰 연결 끊기」를 해 주세요.'); }
 
   function exportData() {
     need_();
@@ -785,7 +785,7 @@
   }
 
   /* ===================== 가족 동기화용 변경 추적 ===================== */
-  // 아이·항목·기록·지출을 한 건씩 비교해, 바뀐 것만 서버로 보내고 서버에서 온 것만 반영합니다.
+  // 자녀·항목·기록·지출을 한 건씩 비교해, 바뀐 것만 서버로 보내고 서버에서 온 것만 반영합니다.
 
   const COLS = ['kids', 'items', 'records', 'spends', 'requests', 'meta'];
   const PLUS_DOC = 'plus'; // families/{가족}/meta/plus — 플러스 구매 기록 (결제 확인 서버만 쓰고, 앱은 읽기만)

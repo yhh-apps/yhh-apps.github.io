@@ -2,6 +2,7 @@
 'use strict';
 const S = { kids:[], items:[], kinds:[], methods:[], kidId:null, date:null, today:null, month:null, tab:'check', day:null, ledger:null, hasPin:false, locked:false };
 const WEEK = ['일','월','화','수','목','금','토'];
+const APP_VERSION = '1.0.0'; // 더보기에 보임. 배포할 때 sw.js CACHE 숫자와 함께 올리기
 const LOCK_AFTER_MS = 5*60*1000; // 백그라운드에 5분 넘게 있으면 다시 잠금
 
 /* ---------- 공통 ---------- */
@@ -18,10 +19,48 @@ function prettyMonth(m){const p=m.split('-');return p[0]+'년 '+Number(p[1])+'�
 function kid(){return S.kids.find(k=>k.id===S.kidId)||S.kids[0]}
 function errMsg(e){return (e&&e.message?e.message:String(e)).replace(/^Error:\s*/,'')}
 function kindBadge(k){return k?`<span class="badge ${k===S.kinds[0]?'need':'want'}">${esc(k)}</span>`:''}
+/* 이름 뒤 조사: 받침이 있으면 「하준이의·하준이에게」, 없으면 「서아의·서아에게」 */
+function hasJong(s){const c=String(s||'').trim().slice(-1).charCodeAt(0);return c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28!==0}
+function callName(n){n=String(n||'');return n+(hasJong(n)?'이':'')}
 let toastT;
-function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),1800)}
-function openModal(html){$('sheet').innerHTML=html;$('modal').classList.add('on')}
-function closeModal(){$('modal').classList.remove('on');if(pendingRefresh){pendingRefresh=false;if(!S.locked&&S.kids.length){renderKids();render()}}}
+/* 알림: 글이 길수록 오래 보여 줌(2~7초), 누르면 바로 닫힘 */
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('on');clearTimeout(toastT);
+  toastT=setTimeout(()=>t.classList.remove('on'),Math.min(7000,Math.max(2200,String(msg).length*110)))}
+function openModal(html){
+  $('sheet').innerHTML=html;
+  if(!$('modal').classList.contains('on')&&navState()!=='modal') pushNav('modal'); // 뒤로가기로 창만 닫히게
+  $('modal').classList.add('on');
+}
+function closeModal(fromBack){
+  $('modal').classList.remove('on');
+  if(!fromBack) setTimeout(()=>{ // 버튼으로 닫았으면 쌓아 둔 뒤로가기 한 칸을 정리 (바로 다른 창을 열었으면 그대로 씀)
+    if(!$('modal').classList.contains('on')&&navState()==='modal') popNav();
+  },0);
+  if(pendingRefresh){pendingRefresh=false;if(!S.locked&&S.kids.length){renderKids();render()}}
+}
+
+/* ---------- 휴대폰 뒤로가기 ----------
+   창이 열려 있으면 창 닫기 → 다른 탭이면 첫 탭으로 → 첫 탭이면 「한 번 더 누르면 닫혀요」 → 2초 안에 또 누르면 앱 닫기.
+   (그냥 두면 이전에 본 개인정보처리방침이나 앱 밖 주소로 넘어가 버림) */
+let ignorePop=0, backArmed=0, navReady=false;
+function navState(){return history.state&&history.state.nav}
+function pushNav(kind){try{history.pushState({nav:kind},'')}catch(e){}}
+function popNav(){ignorePop++;history.back()}
+function initNav(){
+  if(navReady) return; navReady=true;
+  try{history.replaceState({nav:'root'},'');history.pushState({nav:'app'},'')}catch(e){}
+}
+window.addEventListener('popstate',()=>{
+  if(!navReady) return;
+  if(ignorePop>0){ignorePop--;return}
+  if($('modal').classList.contains('on')){closeModal(true);return}
+  if(navState()==='modal') return popNav(); // 닫힌 창의 남은 칸은 건너뜀
+  if(!$('tabs').classList.contains('hide')&&S.tab!=='check'){setTab('check',true);return}
+  if(navState()==='root'){
+    if(Date.now()-backArmed<2000){ignorePop=0;history.back();return} // 앱 닫기
+    backArmed=Date.now(); pushNav('app'); toast('뒤로 버튼을 한 번 더 누르면 앱이 닫혀요');
+  }
+});
 function store(k,v){try{localStorage.setItem(k,v)}catch(e){}}
 function load(k){try{return localStorage.getItem(k)}catch(e){return null}}
 function showErr(e){$('view').innerHTML='<div class="card warn">'+esc(errMsg(e))+'</div>'}
@@ -43,7 +82,7 @@ function applyInvite(){
   if(!INVITE||!Sync.available()) return;
   const c=INVITE; INVITE=null; const shown=Sync.shareCode(c);
   if(!S.kids.length&&INVITE_GP){ renderGpSetup(c); return; } // 조부모 초대
-  if(!S.kids.length&&INVITE_KID){ renderKidSetup(c,INVITE_KID); return; } // 아이 기기 초대
+  if(!S.kids.length&&INVITE_KID){ renderKidSetup(c,INVITE_KID); return; } // 자녀 기기 초대
   if(!S.kids.length&&$('joinCode')){ // 첫 화면
     $('joinCode').value=shown; $('joinCode').scrollIntoView({block:'center'});
     toast('가족 코드가 입력됐어요. 「가족 코드로 참여하기」를 눌러 주세요');
@@ -52,7 +91,7 @@ function applyInvite(){
   if(S.family===c){toast('이미 이 가족과 연결되어 있어요');return}
   if(S.family){
     openModal(`<h3>다른 가족 초대예요</h3><div>이 휴대폰은 이미 다른 가족(${esc(Sync.shareCode(S.family))})과 연결되어 있어요.</div>
-      <div class="muted" style="margin-top:6px">새 가족(${esc(shown)})에 참여하려면 「설정 → 이 휴대폰 연결 끊기」를 한 뒤 코드를 입력해 주세요.</div>
+      <div class="muted" style="margin-top:6px">새 가족(${esc(shown)})에 참여하려면 「더보기 → 가족 연결 → 이 휴대폰 연결 끊기」를 한 뒤 코드를 입력해 주세요.</div>
       <button class="btn full" onclick="closeModal()">확인</button>`);
     return;
   }
@@ -100,7 +139,7 @@ function applyInit(d){
   S.kids=d.kids;S.items=d.items;S.kinds=d.kinds;S.methods=d.methods;S.hasPin=d.hasPin;S.demo=!!d.demo;S.family=d.family||null;
   S.plus=d.plus||{active:false};S.role=d.role||'parent';S.gpName=d.gpName||'';
   const prevPend=S.pendingCount||0; S.pendingCount=d.pendingCount||0; S.pay=d.pay||null; S.kidRole=d.kidRole||null; S.account=d.account||'';
-  if(S.role==='parent'&&S.pendingCount>prevPend&&S.kids.length&&prevPend>=0&&S.started) toast('📸 아이가 실천 인증을 보냈어요!');
+  if(S.role==='parent'&&S.pendingCount>prevPend&&S.kids.length&&prevPend>=0&&S.started) toast('📸 자녀가 실천 인증을 보냈어요!');
   if(S.kidRole) S.kidId=S.kidRole.kidId;
   setTabLabels();
   S.today=d.today;
@@ -113,6 +152,7 @@ function startMain(){
   const saved=load('kidId');
   if(S.kids.some(k=>k.id===saved)&&!S.kidRole) S.kidId=saved;
   $('tabs').classList.remove('hide');
+  initNav();
   $('demoBar').classList.toggle('hide',!S.demo);
   renderKids(); render();
   applyInvite();
@@ -130,24 +170,24 @@ function renderSetup(){
   $('tabs').classList.add('hide'); $('kids').innerHTML=''; $('demoBar').classList.add('hide');
   $('view').innerHTML=`<div class="card">
     <div class="jua" style="font-size:21px">👋 환영해요!</div>
-    <div style="margin-top:6px">아이가 집안일·좋은 습관을 실천하면 용돈이 쌓이고, 쓴 돈과 저축을 함께 기록하는 <b>부모용</b> 용돈 관리 앱이에요.</div>
+    <div style="margin-top:6px">자녀가 집안일·좋은 습관을 실천하면 용돈이 쌓이고, 쓴 돈과 저축을 함께 기록하는 <b>부모용</b> 용돈 관리 앱이에요.</div>
     <div class="tip">🔒 회원가입이 없어요. 기록은 이 휴대폰에 저장되고, 엄마·아빠 휴대폰을 연결(가족 코드)할 때만 동기화 서버를 써요.</div>
-    <label class="f" style="margin-top:14px">아이 이름 (별명도 좋아요)</label>
+    <label class="f" style="margin-top:14px">자녀 이름 (별명도 좋아요)</label>
     <div id="setupKids"><div class="kidrow"><input class="skid" placeholder="예: 첫째"></div></div>
-    <button class="btn sm ghost" style="margin-top:8px" onclick="addSetupKid()">+ 아이 더 추가</button>
-    <div class="muted" style="margin-top:12px">기본 실천 항목(이불 개기, 책 읽기, 집안일 돕기 등)과 벌금 항목 2개가 들어가요. 「아이·항목」 탭에서 언제든 바꿀 수 있어요.</div>
+    <button class="btn sm ghost" style="margin-top:8px" onclick="addSetupKid()">+ 자녀 더 추가</button>
+    <div class="muted" style="margin-top:12px">기본 실천 항목(이불 개기, 책 읽기, 집안일 돕기 등)과 벌금 항목 2개가 들어가요. 「자녀·항목」 탭에서 언제든 바꿀 수 있어요.</div>
     <button class="btn full" id="setupBtn" onclick="doSetup()">시작하기</button>
   </div>
   ${Sync.available()?`<div class="card">
     <div class="jua" style="font-size:18px">👨‍👩‍👧 다른 부모님이 먼저 시작했나요?</div>
-    <div class="muted" style="margin-top:4px">먼저 쓰고 있는 휴대폰의 「설정 → 가족과 함께 쓰기」에 나오는 가족 코드를 입력하면 같은 기록을 함께 써요.</div>
+    <div class="muted" style="margin-top:4px">먼저 쓰고 있는 휴대폰의 「더보기 → 가족 연결」에 나오는 가족 코드를 입력하면 같은 기록을 함께 써요.</div>
     <input id="joinCode" class="codein" placeholder="ABCD-EFGH" maxlength="9" autocomplete="off" style="margin-top:10px">
     <button class="btn full" style="background:var(--green)" id="joinBtn" onclick="doJoin()">가족 코드로 참여하기</button>
   </div>`:''}
   ${restoreCardHtml()}
   <div class="card">
     <div class="jua" style="font-size:18px">👀 어떻게 쓰는지 먼저 볼까요?</div>
-    <div class="muted" style="margin-top:4px">예시 아이 2명의 4주치 기록(실천·벌금·보너스·지출·저축)으로 둘러볼 수 있어요. 언제든 내 아이로 새로 시작할 수 있어요.</div>
+    <div class="muted" style="margin-top:4px">예시 자녀 2명의 4주치 기록(실천·벌금·보너스·지출·저축)으로 둘러볼 수 있어요. 언제든 내 자녀로 새로 시작할 수 있어요.</div>
     <button class="btn full" style="background:var(--blue)" id="demoBtn" onclick="doDemo()">예시로 둘러보기</button>
     <button class="btn full ghost" onclick="$('importFile').click()">📂 백업 파일에서 불러오기</button>
   </div>`;
@@ -158,8 +198,8 @@ function doDemo(){
     .catch(e=>{$('demoBtn').disabled=false;toast(errMsg(e))});
 }
 function askEndDemo(){
-  openModal(`<h3>내 아이로 시작하기</h3>
-    <div>예시 자료를 모두 지우고, 내 아이 이름으로 새로 시작해요.</div>
+  openModal(`<h3>내 자녀로 시작하기</h3>
+    <div>예시 자료를 모두 지우고, 내 자녀 이름으로 새로 시작해요.</div>
     <button class="btn full" onclick="endDemo()">예시 지우고 시작하기</button>
     <button class="btn full ghost" onclick="closeModal()">계속 둘러보기</button>`);
 }
@@ -209,7 +249,11 @@ function renderKids(){
   $('kids').style.display = (S.tab==='manage'||S.tab==='items'||S.kids.length<2||isKid())?'none':'flex';
 }
 function pickKid(id){S.kidId=id;store('kidId',id);renderKids();render()}
-function setTab(t){
+function setTab(t,fromBack){
+  if(!fromBack&&navReady){ // 첫 탭에서 다른 탭으로 가면 뒤로가기 한 칸, 첫 탭으로 돌아오면 그 칸 정리
+    if(t!=='check'&&navState()==='app') pushNav('tab');
+    else if(t==='check'&&navState()==='tab') popNav();
+  }
   S.tab=t;
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
   renderKids();render();window.scrollTo(0,0);
@@ -239,9 +283,9 @@ function renderDay(){
   let h = `${pendingBannerHtml()}
   <div class="card balcard">
     <div class="row" style="align-items:flex-end">
-      <div style="min-width:0"><div class="bal-label">${esc(k.emoji)} ${esc(k.name)}의 통장 잔액</div>
+      <div style="min-width:0"><div class="bal-label">${esc(k.emoji)} ${esc(callName(k.name))}의 통장 잔액</div>
         <div class="bal ${d.balance<0?'minus':''}">${won(d.balance)}</div></div>
-      ${isGp()?'':'<button class="btn sm spendbtn" onclick="openSpend()">🛒 쓴 돈 기록</button>'}
+      ${isGp()?'':'<button class="btn sm spendbtn" onclick="openSpend()">🛒 지출 기록</button>'}
     </div>
     ${d.balance<0?'<div class="muted" style="color:var(--red)">마이너스예요. 실천으로 채워 가도록 이야기 나눠 보세요.</div>':''}
     ${jarsHtml(d.jars)}
@@ -257,7 +301,7 @@ function renderDay(){
   if(daily.length) h+=`<div class="sec">☀️ 매일 실천 <span class="muted">(하루 최대 ${won(dayMax)})</span></div>`+daily.map(itemHtml).join('');
   if(weekly.length) h+=`<div class="sec">📅 이번 주 실천 <span class="muted">(월~일 한 주 동안)</span></div>`+weekly.map(itemHtml).join('');
   if(fineItems.length) h+=`<div class="sec">⚠️ 벌금 <span class="muted">(약속을 지키지 못했을 때)</span></div>`+fineItems.map(itemHtml).join('');
-  if(!d.items.length) h+='<div class="card muted">등록된 항목이 없어요. 「아이·항목」 탭에서 항목을 추가해 주세요.</div>';
+  if(!d.items.length) h+='<div class="card muted">등록된 항목이 없어요. 「자녀·항목」 탭에서 항목을 추가해 주세요.</div>';
   const extras=(d.interests||[]).map(x=>`<div class="row" style="padding:4px 0"><span>🏦 ${esc(x.name)}</span><span class="bonus">+${won(x.amount)}</span></div>`).join('')
     +(d.cheers||[]).map(c=>`<div class="row" style="padding:4px 0"><span>💌 ${esc(c.name)}</span>${isGp()?'':`<button class="del" onclick="askDelBonus('${c.id}',0)">삭제</button>`}</div>`).join('');
   h+=`<div class="sec">🎁 특별 보너스 <span class="muted">(받은 용돈·칭찬·응원)</span></div>
@@ -270,7 +314,7 @@ function renderDay(){
         :`<button class="btn full" style="background:#FFB020" onclick="openBonus()">+ 보너스 넣기</button>`}
     </div>
     <div class="sharecard ${isGp()?'hide':''}">
-      <div class="jua" style="font-size:18px">💬 ${d.date===d.today?'오늘':shortDate(d.date)} 결과를 ${esc(k.name)}에게 보내 볼까요?</div>
+      <div class="jua" style="font-size:18px">💬 ${d.date===d.today?'오늘':shortDate(d.date)} 결과를 ${esc(callName(k.name))}에게 보내 볼까요?</div>
       <div class="muted" style="margin-top:4px">한 일, 모은 돈, 잔액을 정리해서 카톡·문자로 보낼 수 있어요. 보내기 전에 내용을 보고 한마디 덧붙일 수 있어요.</div>
       <button class="btn full" style="background:var(--green)" onclick="shareDay()">${d.date===d.today?'오늘':prettyDate(d.date)} 결과 보내기</button>
     </div>`;
@@ -330,7 +374,7 @@ function tapBox(itemId,n){
   }).catch(e=>{el.classList.remove('busy');toast(errMsg(e))});
 }
 
-/* ---------- 아이에게 보내기 (카톡·문자 등 공유) ---------- */
+/* ---------- 자녀에게 보내기 (카톡·문자 등 공유) ---------- */
 function plus(n){return (n>=0?'+':'')+won(n)}
 function goalLine(k,bal){
   if(!k.goalName||!k.goalAmount) return '';
@@ -338,7 +382,7 @@ function goalLine(k,bal){
 }
 function buildDayMsg(){
   const d=S.day, k=kid(), L=[];
-  L.push(`${k.emoji} ${k.name}의 ${d.date===d.today?'오늘':''} 실천 (${prettyDate(d.date)})`.replace('  ',' '));
+  L.push(`${k.emoji} ${callName(k.name)}의 ${d.date===d.today?'오늘':''} 실천 (${prettyDate(d.date)})`.replace('  ',' '));
   const done=d.items.filter(i=>i.amount>=0&&d.dayCounts[i.id]), fines=d.items.filter(i=>i.amount<0&&d.dayCounts[i.id]);
   L.push('');
   if(done.length) done.forEach(i=>{const n=d.dayCounts[i.id];L.push(`✅ ${i.name}${n>1?' ×'+n:''}  ${plus(i.amount*n)}`)});
@@ -361,7 +405,7 @@ function buildDayMsg(){
 }
 function buildMonthMsg(){
   const Lg=S.ledger, k=kid(), m=Number(Lg.month.slice(5)), L=[];
-  L.push(`${k.emoji} ${k.name}의 ${m}월 용돈 통장`);
+  L.push(`${k.emoji} ${callName(k.name)}의 ${m}월 용돈 통장`);
   L.push('');
   L.push(`✅ 실천으로 번 돈  +${won(Lg.monthIn)}`);
   if(Lg.monthBonus) L.push(`🎁 특별 보너스  +${won(Lg.monthBonus)}`);
@@ -426,14 +470,14 @@ const BONUS_FROM=['할머니','할아버지','외할머니','외할아버지','�
 function openBonus(){
   const k=kid();
   openModal(`<h3>🎁 특별 보너스 넣기</h3>
-    <div class="muted">${esc(k.emoji)} ${esc(k.name)}의 통장에 더해져요.</div>
+    <div class="muted">${esc(k.emoji)} ${esc(callName(k.name))}의 통장에 더해져요.</div>
     <label class="f">누구에게 받았나요?</label>
     <div class="chips" id="bChips">${BONUS_FROM.map((x,i)=>`<button type="button" onclick="pickFrom(this,${i})">${x}</button>`).join('')}</div>
     <input id="bFrom" placeholder="직접 입력 (예: 큰이모)">
     <label class="f">금액(원)</label><input id="bAmt" type="number" inputmode="numeric" step="1000">
     <label class="f">날짜</label><input id="bDate" type="date" value="${S.date}" max="${S.today}">
     <label class="f">메모 (선택)</label><input id="bMemo" placeholder="예: 추석, 생일 축하">
-    <div class="tip">💡 받은 돈 중 얼마를 실물 통장에 저축할지 아이와 함께 정해 보세요.</div>
+    <div class="tip">💡 받은 돈 중 얼마를 실물 통장에 저축할지 자녀와 함께 정해 보세요.</div>
     <button class="btn full" id="bBtn" onclick="doBonus()">통장에 넣기</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
 }
@@ -463,8 +507,8 @@ function doDelBonus(id,fromLedger){
 let spendKind='', spendMethod='카드', spendJar='spend';
 function openSpend(){
   const k=kid(), j=S.day.jars; spendKind=''; spendMethod=S.methods[0]||'카드'; spendJar='spend';
-  openModal(`<h3>🛒 쓴 돈 기록하기</h3>
-    <div class="muted">${esc(k.emoji)} ${esc(k.name)}의 지금 잔액: <b>${won(S.day.balance)}</b></div>
+  openModal(`<h3>🛒 지출 기록하기</h3>
+    <div class="muted">${esc(k.emoji)} ${esc(callName(k.name))}의 지금 잔액: <b>${won(S.day.balance)}</b></div>
     ${j?`<label class="f">어느 통장에서 쓸까요?</label>
     <div class="seg" id="sJar">${['spend','save','give'].map(x=>`<button type="button" class="${x==='spend'?'on':''}" onclick="pickJar(this,'${x}')">${JAR_LABEL[x][0]} ${JAR_LABEL[x][1]}<br><small>${won(j[x])}</small></button>`).join('')}</div>
     <div class="muted" style="margin-top:4px">💝 나눔 통장은 기부·선물처럼 남을 위해 쓸 때 골라요.</div>`:''}
@@ -523,7 +567,7 @@ function renderLedger(L){
     <button class="nav" onclick="moveMonth(-1)" aria-label="이전 달">◀</button><div class="d">${prettyMonth(L.month)}</div>
     <button class="nav" onclick="moveMonth(1)" aria-label="다음 달" ${isNow?'disabled':''}>▶</button></div>
   <div class="card">
-    <div class="bal-label">${esc(k.emoji)} ${esc(k.name)}의 앱 통장 잔액</div>
+    <div class="bal-label">${esc(k.emoji)} ${esc(callName(k.name))}의 앱 통장 잔액</div>
     <div class="bal ${L.balance<0?'minus':''}">${won(L.balance)}</div>
     ${jarsHtml(L.jars)}
     ${interestHtml(L)}
@@ -540,27 +584,25 @@ function renderLedger(L){
   </div>`;
   if(L.monthOut>0){
     const need=L.kindSum[S.kinds[0]]||0, want=L.kindSum[S.kinds[1]]||0, etc=L.monthOut-need-want;
-    h+=`<div class="card"><div class="jua" style="font-size:18px;margin-bottom:6px">🧺 이번 달 어디에 썼을까?</div>
+    h+=`<details class="fold"><summary>🧺 이번 달 어디에 썼을까?</summary><div class="fbody">
       <div class="est"><span>${kindBadge(S.kinds[0])}</span><b>${won(need)}</b></div>
       <div class="est"><span>${kindBadge(S.kinds[1])}</span><b>${won(want)}</b></div>
       ${etc>0?`<div class="est"><span class="badge">구분 안 함</span><b>${won(etc)}</b></div>`:''}
-      <div class="muted" style="margin-top:6px">${S.methods.map(m=>(m==='현금'?'💵 ':'💳 ')+m+' '+won((L.methodSum||{})[m]||0)).join(' · ')}</div></div>`;
+      <div class="muted" style="margin-top:6px">${S.methods.map(m=>(m==='현금'?'💵 ':'💳 ')+m+' '+won((L.methodSum||{})[m]||0)).join(' · ')}</div></div></details>`;
   }
   if(L.stats.length){
-    h+=`<div class="card"><div class="jua" style="font-size:18px;margin-bottom:6px">🏅 이번 달 많이 실천한 것</div>`+
-      L.stats.slice(0,5).map((s,i)=>`<div class="est"><span>${['🥇','🥈','🥉','④','⑤'][i]} ${esc(s.name)}</span><span class="muted r">${s.count}번 · ${won(s.amount)}</span></div>`).join('')+`</div>`;
+    h+=`<details class="fold"><summary>🏅 이번 달 많이 실천한 것</summary><div class="fbody">`+
+      L.stats.slice(0,5).map((s,i)=>`<div class="est"><span>${['🥇','🥈','🥉','④','⑤'][i]} ${esc(s.name)}</span><span class="muted r">${s.count}번 · ${won(s.amount)}</span></div>`).join('')+`</div></details>`;
   }
-  h+=`<div class="card"><div class="jua" style="font-size:18px">📒 ${esc(k.name)}의 통장 내역</div>
+  h+=`<div class="card"><div class="jua" style="font-size:18px">📒 ${esc(callName(k.name))}의 통장 내역</div>
     <div id="histBox">${historyHtml(L)}</div>`;
   const mm=Number(L.month.slice(5));
   h+=`</div>
-    ${plusShortcutsHtml()}
     <div class="sharecard ${viewOnly()?'hide':''}">
-      <div class="jua" style="font-size:18px">💬 ${mm}월 통장을 ${esc(k.name)}에게 보내 볼까요?</div>
+      <div class="jua" style="font-size:18px">💬 ${mm}월 통장을 ${esc(callName(k.name))}에게 보내 볼까요?</div>
       <div class="muted" style="margin-top:4px">번 돈, 쓴 돈, 저축, 많이 실천한 것을 정리해서 카톡·문자로 보낼 수 있어요. 보내기 전에 내용을 보고 한마디 덧붙일 수 있어요.</div>
       <button class="btn full" style="background:var(--green)" onclick="shareMonth()">${mm}월 통장 보내기</button>
-    </div>
-    <div class="tip">💡 아이와 통장 보며 이야기 나누기: "이번 달 산 것 중 꼭 필요했던 건 뭐였니?", "얼마를 진짜 통장에 저축해 둘까?"</div>`;
+    </div>`;
   $('view').innerHTML=h;
   bindWeekSwipe();
 }
@@ -587,7 +629,7 @@ function monthsAgo(m){const a=S.today.slice(0,7).split('-').map(Number), b=m.spl
 function historyHtml(L){
   if(!L.lines.length) return '<div class="muted" style="padding:14px 0">이 달의 거래가 없어요.</div>';
   const key=S.kidId+'|'+L.month;
-  if(S.histKey!==key){ // 달이나 아이가 바뀌면: 이번 달이면 오늘이 있는 주, 지난 달이면 마지막 주부터
+  if(S.histKey!==key){ // 달이나 자녀가 바뀌면: 이번 달이면 오늘이 있는 주, 지난 달이면 마지막 주부터
     S.histKey=key; S.histOpen=false;
     const ws=ledgerWeeks(L), t=S.today;
     let i=ws.findIndex(w=>t>=w.from&&t<=w.to); if(i<0) i=ws.length-1;
@@ -658,7 +700,7 @@ function openTransfer(){
   const k=kid(), j=S.ledger&&S.ledger.jars, bal=j?Math.min(j.save,S.ledger.balance):(S.ledger?S.ledger.balance:0);
   if(bal<=0){toast(j?'저축 통장에 이체할 돈이 없어요':'이체할 잔액이 없어요');return}
   openModal(`<h3>🏦 실물 통장으로 이체하기</h3>
-    <div class="muted">${esc(k.emoji)} ${esc(k.name)}의 앱 잔액: <b>${won(bal)}</b><br>실제 은행 통장에 넣은 금액만큼 앱 잔액에서 빼요.</div>
+    <div class="muted">${esc(k.emoji)} ${esc(callName(k.name))}의 앱 잔액: <b>${won(bal)}</b><br>실제 은행 통장에 넣은 금액만큼 앱 잔액에서 빼요.</div>
     ${S.ledger&&S.ledger.jars?`<div class="tip">🫙 저축 통장(${won(S.ledger.jars.save)})에서 빠져요.</div>`:''}
     <label class="f">이체한 금액(원)</label><input id="tAmt" type="number" inputmode="numeric" step="1000" value="${Math.floor(bal/1000)*1000||bal}">
     <div class="chips" style="margin-top:6px"><button type="button" onclick="$('tAmt').value=${bal}">전액 ${won(bal)}</button>
@@ -676,10 +718,27 @@ function doTransfer(){
   }).catch(e=>{$('tBtn').disabled=false;toast(errMsg(e))});
 }
 
-/* ---------- 아이·항목 ---------- */
+/* ---------- 자녀·항목 ---------- */
 function renderItems(){
   if(viewOnly()) return setTab('manage');
-  const est =S.kids.map(k=>{
+  const kidName=id=>id==='ALL'?'모두':((S.kids.find(k=>k.id===id)||{}).name||'(삭제된 자녀)');
+  let h=`<div class="card"><div class="row"><div class="jua" style="font-size:18px">✅ 실천 항목</div><button class="btn sm" onclick="editItem()">+ 항목 추가</button></div>`+
+    (S.items.length?S.items.map(i=>`<div class="mitem tap ${i.active?'':'off'}" onclick="editItem('${i.id}')"><div class="t">
+      <div><b>${esc(i.name)}</b></div>
+      <div style="margin-top:3px"><span class="badge">${i.period==='매일'?'하루':'한 주'} ${i.maxCount}번</span><span class="badge">${esc(kidName(i.target))}</span>${i.amount<0?'<span class="badge want">벌금</span>':''}${i.active?'':'<span class="badge off">쉬는 중</span>'}</div></div>
+      <span class="amt ${i.amount<0?'out':''}" style="font-size:16px">${i.amount<0?'−'+won(-i.amount):won(i.amount)}</span><span class="chev">›</span></div>`).join(''):'<div class="muted">항목이 없어요</div>')+
+    `<div class="muted" style="margin-top:8px">항목을 누르면 고치거나 지울 수 있어요.</div></div>`;
+  h+=`<div class="card"><div class="row"><div class="jua" style="font-size:18px">👧 자녀</div><button class="btn sm" onclick="editKid()">+ 자녀 추가</button></div>`+
+    S.kids.map(k=>`<div class="mitem tap" onclick="editKid('${k.id}')"><div class="t"><b>${esc(k.emoji)} ${esc(k.name)}</b> <span class="muted">${esc(k.desc)}</span>
+      ${k.goalName?`<div class="muted">목표 ${esc(k.goalName)} ${won(k.goalAmount)}</div>`:''}
+      ${kidPlusBadges(k)}</div><span class="chev">›</span></div>`).join('')+`</div>
+    <div class="muted center">📊 한 달 예상 용돈, ⭐ 플러스는 「더보기」에 있어요.</div>`;
+  $('view').innerHTML=h;
+}
+
+/* ---------- 더보기: 기능을 아이콘으로 모아 두고, 누르면 창으로 자세히 ---------- */
+function estHtml(){
+  return S.kids.map(k=>{
     const its=S.items.filter(i=>i.active&&i.amount>0&&(i.target==='ALL'||i.target===k.id));
     const calc=f=>{
       const d=its.filter(i=>i.period==='매일').reduce((s,i)=>s+i.amount*f(i),0);
@@ -689,44 +748,65 @@ function renderItems(){
     return `<div class="est"><span>${esc(k.emoji)} ${esc(k.name)}</span>
       <span class="r"><b>1번씩: 약 ${won(calc(()=>1))}</b><br><span class="muted">최대 횟수까지: 약 ${won(calc(i=>i.maxCount))}</span></span></div>`;
   }).join('');
-  const kidName=id=>id==='ALL'?'모두':((S.kids.find(k=>k.id===id)||{}).name||'(삭제된 아이)');
-  let h=plusCardHtml();
-  h+=`<div class="card"><div class="jua" style="font-size:18px">📊 한 달 예상 용돈</div>${est}
-      <div class="muted" style="margin-top:6px">매일 항목 × 30일 + 매주 항목 × 4.3주 기준(벌금 제외)</div></div>`;
-  h+=`<div class="card"><div class="row"><div class="jua" style="font-size:18px">✅ 실천 항목</div><button class="btn sm" onclick="editItem()">+ 항목 추가</button></div>`+
-    (S.items.length?S.items.map(i=>`<div class="mitem tap ${i.active?'':'off'}" onclick="editItem('${i.id}')"><div class="t">
-      <div><b>${esc(i.name)}</b></div>
-      <div style="margin-top:3px"><span class="badge">${i.period==='매일'?'하루':'한 주'} ${i.maxCount}번</span><span class="badge">${esc(kidName(i.target))}</span>${i.amount<0?'<span class="badge want">벌금</span>':''}${i.active?'':'<span class="badge off">쉬는 중</span>'}</div></div>
-      <span class="amt ${i.amount<0?'out':''}" style="font-size:16px">${i.amount<0?'−'+won(-i.amount):won(i.amount)}</span><span class="chev">›</span></div>`).join(''):'<div class="muted">항목이 없어요</div>')+
-    `<div class="muted" style="margin-top:8px">항목을 누르면 고치거나 지울 수 있어요.</div></div>`;
-  h+=`<div class="card"><div class="row"><div class="jua" style="font-size:18px">👧 아이</div><button class="btn sm" onclick="editKid()">+ 아이 추가</button></div>`+
-    S.kids.map(k=>`<div class="mitem tap" onclick="editKid('${k.id}')"><div class="t"><b>${esc(k.emoji)} ${esc(k.name)}</b> <span class="muted">${esc(k.desc)}</span>
-      ${k.goalName?`<div class="muted">목표 ${esc(k.goalName)} ${won(k.goalAmount)}</div>`:''}
-      ${kidPlusBadges(k)}</div><span class="chev">›</span></div>`).join('')+`</div>`;
-  $('view').innerHTML=h;
 }
-
-/* ---------- 설정 ---------- */
 function renderManage(){
   if(isGp()) return renderGpManage();
-  let h=familyCardHtml();
-  h+=accountCardHtml();
-  const p=S.pay||{}, payOn=p.kakao||p.account;
-  const row=(ico,label,val,click)=>`<button class="lrow" onclick="${click}"><span class="li">${ico}</span><span class="lt">${label}</span><span class="lv">${val}</span><span class="chev">›</span></button>`;
-  h+=`<div class="lhead">앱 설정</div><div class="list">
-      ${row('🔒','앱 잠금',S.hasPin?'켜짐':'꺼짐','openPin()')}
-      ${row('💸',`할머니·할아버지 용돈 받을 곳 ${plusTag()}`,payOn?'등록됨':'등록 안 함','openPaySettings()')}
+  const p=S.pay||{}, payOn=p.kakao||p.account, pl=S.plus||{};
+  const tile=(ico,label,sub,click,plus)=>`<button class="mtile" onclick="${click}"><span class="mico">${ico}</span>
+    <span class="mlab">${label}${plus?plusStar():''}</span>${sub?`<span class="msub">${sub}</span>`:''}</button>`;
+  const h=`<div class="moregrid">
+      ${tile('👨‍👩‍👧','가족 연결',S.family?'연결됨':'',"openMore('family')")}
+      ${tile('🔐','Google 계정',S.account?'연결됨':'',"openMore('account')")}
+      ${tile('🔒','앱 잠금',S.hasPin?'켜짐':'꺼짐','openPin()')}
+      ${tile('📜','용돈 계약서','',"pickKidFor('openContract')",1)}
+      ${tile('🎖️','성장 앨범','',"pickKidFor('openAlbum')",1)}
+      ${tile('🧒','자녀 화면','',"pickKidFor('openKidAccess')",1)}
+      ${tile('👵','조부모 초대','',"openMore('gp')",1)}
+      ${tile('💸','용돈 받을 곳',payOn?'등록됨':'','openPaySettings()',1)}
+      ${tile('📊','예상 용돈','',"openMore('est')")}
+      ${tile('⭐','플러스',pl.purchased?'구매 완료':pl.promo?'무료 체험 중':'','openPlusPage()')}
+      ${tile('💾','백업·초기화','',"openMore('backup')")}
+      ${tile('📄','정보·문의','',"openMore('info')")}
     </div>
-    <div class="lhead">백업 · 기록은 이 휴대폰에 있어요. 가끔 백업 파일을 저장해 두세요</div><div class="list">
-      ${row('📤','백업 파일 저장하기','','doExport()')}
-      ${row('📂','백업 파일 불러오기','','askImport()')}
-    </div>
-    <div class="lhead">앱 정보</div><div class="list">
-      <a class="lrow" href="privacy.html"><span class="li">📄</span><span class="lt">개인정보처리방침</span><span class="chev">›</span></a>
-      <a class="lrow" href="mailto:yhh.apps.help@gmail.com"><span class="li">✉️</span><span class="lt">문의하기</span><span class="lv">yhh.apps.help@gmail.com</span></a>
-    </div>
-    <button class="dangerlink" onclick="askReset()">모든 기록 지우고 처음부터</button>`;
+    <div class="ver">용돈 받아라 ${APP_VERSION}</div>`;
   $('view').innerHTML=h;
+}
+/* 자녀가 여럿이면 먼저 고르고, 한 명이면 바로 열기 (fn: 'openContract' 같은 함수 이름) */
+function pickKidFor(fn){
+  const go=id=>window[fn](id);
+  if(S.kids.length===1) return go(S.kids[0].id);
+  const title={openContract:'📜 용돈 계약서',openAlbum:'🎖️ 성장 앨범',openKidAccess:'🧒 자녀 화면'}[fn]||'';
+  openModal(`<h3>${title}</h3><div class="muted">어느 자녀를 볼까요?</div>
+    <div class="list" style="margin-top:10px">${S.kids.map(k=>`<button class="lrow" onclick="${fn}('${k.id}')"><span class="li">${esc(k.emoji)}</span><span class="lt">${esc(k.name)}</span><span class="chev">›</span></button>`).join('')}</div>
+    <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
+}
+function openMore(what){
+  const close='<button class="btn full ghost" onclick="closeModal()">닫기</button>';
+  if(what==='family') return openModal(familyCardHtml()+close);
+  if(what==='account'){
+    const a=accountCardHtml();
+    return openModal((a||`<h3>🔐 Google 계정</h3><div class="muted">${S.demo?'예시 자료에서는 쓸 수 없어요. 「내 자녀로 시작하기」 후에 연결해 보세요.':'지금은 쓸 수 없어요.'}</div>`)+close);
+  }
+  if(what==='gp'){
+    if(!S.family) return openModal(`<h3>👵 할머니·할아버지 초대 ${plusTag()}</h3>
+      <div>조부모님이 손주의 실천과 통장을 보고, 응원 메시지와 용돈을 보낼 수 있어요.</div>
+      <div class="tip">먼저 「가족 연결」에서 가족을 만들어야 초대 링크를 보낼 수 있어요.</div>
+      <button class="btn full" style="background:var(--green)" onclick="openMore('family')">가족 연결하러 가기</button>${close}`);
+    return shareGpInvite();
+  }
+  if(what==='est') return openModal(`<h3>📊 한 달 예상 용돈</h3>${estHtml()}
+    <div class="muted" style="margin-top:6px">매일 항목 × 30일 + 매주 항목 × 4.3주 기준(벌금 제외)</div>${close}`);
+  if(what==='backup') return openModal(`<h3>💾 백업·초기화</h3>
+    <div class="muted">기록은 이 휴대폰에 있어요. 가족 연결이나 Google 계정 없이 쓰고 있다면, 가끔 백업 파일을 저장해 두세요.</div>
+    <button class="btn full ghost" onclick="doExport()">📤 백업 파일 저장하기</button>
+    <button class="btn full ghost" onclick="askImport()">📂 백업 파일 불러오기</button>
+    ${close}<button class="dangerlink" onclick="askReset()">모든 기록 지우고 처음부터</button>`);
+  if(what==='info') return openModal(`<h3>📄 정보·문의</h3><div class="list">
+      <a class="lrow" href="privacy.html" target="_blank" rel="noopener"><span class="li">📄</span><span class="lt">개인정보처리방침</span><span class="chev">›</span></a>
+      <a class="lrow" href="mailto:yhh.apps.help@gmail.com"><span class="li">✉️</span><span class="lt">문의하기</span><span class="lv">yhh.apps.help@gmail.com</span></a>
+      <div class="lrow" style="cursor:default"><span class="li">🏷️</span><span class="lt">버전</span><span class="lv">${APP_VERSION}</span></div>
+    </div>
+    <div class="muted" style="margin-top:8px">회원가입 없이 기록을 이 휴대폰에 저장해요. 가족과 연결하면 동기화 서버에도 저장돼요.</div>${close}`);
 }
 function afterSave(d,msg){applyInit(d);closeModal();renderKids();render();toast(msg)}
 
@@ -737,7 +817,7 @@ function editItem(id){
   const maxOpts=[1,2,3,4,5].map(n=>`<option value="${n}" ${it.maxCount===n?'selected':''}>${n}번</option>`).join('');
   openModal(`<h3>${id?'항목 수정':'새 항목'}</h3>
     <label class="f">항목 이름</label><input id="fName" value="${esc(it.name)}" placeholder="예: 신발 정리하기">
-    <label class="f">교육 의미 (아이에게 들려줄 설명)</label><textarea id="fMean" placeholder="왜 하는지 아이 눈높이로">${esc(it.meaning)}</textarea>
+    <label class="f">교육 의미 (자녀에게 들려줄 설명)</label><textarea id="fMean" placeholder="왜 하는지 자녀 눈높이로">${esc(it.meaning)}</textarea>
     <div class="row" style="gap:10px">
       <div style="flex:1"><label class="f">1번 금액(원)</label><input id="fAmt" type="number" step="10" value="${it.amount}"></div>
       <div style="flex:1"><label class="f">주기</label><select id="fPer"><option ${it.period==='매일'?'selected':''}>매일</option><option ${it.period==='매주'?'selected':''}>매주</option></select></div>
@@ -763,19 +843,24 @@ function askDelItem(id){
     <button class="btn full red" onclick="this.disabled=true;call('deleteItem','${id}').then(d=>afterSave(d,'삭제했어요')).catch(e=>toast(errMsg(e)))">삭제</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
 }
+/* 자녀 이모지: 고를 수 있는 12개, 새 자녀는 아직 안 쓴 것 중 하나를 자동으로 */
+const KID_EMOJIS=['🐯','🐰','🐻','🐶','🐱','🦊','🐼','🐨','🐥','🐸','🦁','🐹'];
+function nextKidEmoji(){return KID_EMOJIS.find(e=>!S.kids.some(k=>k.emoji===e))||KID_EMOJIS[S.kids.length%KID_EMOJIS.length]}
+function pickEmoji(e){$('kEmo').value=e;document.querySelectorAll('.emopick button').forEach(b=>b.classList.toggle('on',b.textContent===e))}
 function editKid(id){
-  const k=S.kids.find(x=>x.id===id)||{name:'',desc:'',emoji:'🙂',goalName:'',goalAmount:''};
-  openModal(`<h3>${id?'아이 정보 수정':'아이 추가'}</h3>
-    <div class="row" style="gap:10px">
-      <div style="flex:0 0 80px"><label class="f">이모지</label><input id="kEmo" value="${esc(k.emoji)}" style="text-align:center"></div>
-      <div style="flex:1"><label class="f">이름 (별명도 좋아요)</label><input id="kName" value="${esc(k.name)}"></div></div>
+  const k=S.kids.find(x=>x.id===id)||{name:'',desc:'',emoji:nextKidEmoji(),goalName:'',goalAmount:''};
+  const opts=KID_EMOJIS.indexOf(k.emoji)<0?[k.emoji].concat(KID_EMOJIS):KID_EMOJIS;
+  openModal(`<h3>${id?'자녀 정보 수정':'자녀 추가'}</h3>
+    <label class="f">이름 (별명도 좋아요)</label><input id="kName" value="${esc(k.name)}">
+    <label class="f">이모지</label><input id="kEmo" type="hidden" value="${esc(k.emoji)}">
+    <div class="emopick">${opts.map(e=>`<button type="button" class="${e===k.emoji?'on':''}" onclick="pickEmoji(this.textContent)">${esc(e)}</button>`).join('')}</div>
     <label class="f">설명</label><input id="kDesc" value="${esc(k.desc)}" placeholder="예: 초등학교 2학년">
     <label class="f">저축 목표 (선택)</label><input id="kGoal" value="${esc(k.goalName)}" placeholder="예: 레고 자동차">
     <label class="f">목표 금액(원)</label><input id="kGoalAmt" type="number" inputmode="numeric" step="1000" value="${k.goalAmount||''}">
     ${kidPlusFields(k)}
     <button class="btn full" id="kBtn" onclick="doSaveKid('${id||''}')">저장</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>
-    ${id?`<button class="linkdel" onclick="askDelKid('${id}')">이 아이 삭제하기</button>`:''}`);
+    ${id?`<button class="linkdel" onclick="askDelKid('${id}')">이 자녀 삭제하기</button>`:''}`);
 }
 function doSaveKid(id){
   const k=Object.assign({id:id,name:$('kName').value,desc:$('kDesc').value,emoji:$('kEmo').value,
@@ -785,8 +870,8 @@ function doSaveKid(id){
 }
 function askDelKid(id){
   const k=S.kids.find(x=>x.id===id);
-  openModal(`<h3>아이 삭제</h3><div>${esc(k.emoji)} ${esc(k.name)}을(를) 삭제할까요?</div>
-    <div class="warn">이 아이의 통장 기록과 전용 항목이 모두 지워지고 되돌릴 수 없어요.</div>
+  openModal(`<h3>자녀 삭제</h3><div>${esc(k.emoji)} ${esc(callName(k.name))}를 삭제할까요?</div>
+    <div class="warn">이 자녀의 통장 기록과 전용 항목이 모두 지워지고 되돌릴 수 없어요.</div>
     <button class="btn full red" onclick="this.disabled=true;call('deleteKid','${id}').then(d=>afterSave(d,'삭제했어요')).catch(e=>{this.disabled=false;toast(errMsg(e))})">삭제</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
 }
@@ -795,7 +880,7 @@ function askDelKid(id){
 function familyCardHtml(){
   let h=`<div class="card"><div class="jua" style="font-size:18px">👨‍👩‍👧 가족과 함께 쓰기</div>`;
   if(!Sync.available()) return h+`<div class="muted" style="margin-top:4px">가족 동기화는 준비 중이에요.</div></div>`;
-  if(S.demo) return h+`<div class="muted" style="margin-top:4px">예시 자료에서는 쓸 수 없어요. 「내 아이로 시작하기」 후에 엄마·아빠 휴대폰을 연결해 보세요.</div></div>`;
+  if(S.demo) return h+`<div class="muted" style="margin-top:4px">예시 자료에서는 쓸 수 없어요. 「내 자녀로 시작하기」 후에 엄마·아빠 휴대폰을 연결해 보세요.</div></div>`;
   if(!S.family) return h+`<div class="muted" style="margin-top:4px">엄마·아빠 휴대폰을 연결하면 누가 체크하든 같은 통장을 함께 봐요. 이 휴대폰에서 가족을 만들고, 나온 코드를 다른 휴대폰에 입력하세요.</div>
     <button class="btn full" style="background:var(--green)" onclick="askCreateFamily()">가족 만들기 (코드 받기)</button>
     <button class="btn full ghost" onclick="askJoinFamily()">다른 휴대폰의 가족 코드 입력하기</button></div>`;
@@ -809,8 +894,8 @@ function familyCardHtml(){
 }
 function askCreateFamily(){
   openModal(`<h3>👨‍👩‍👧 가족 만들기</h3>
-    <div>이 휴대폰의 아이·항목·통장 기록을 동기화 서버(Google Firebase)에 올리고 가족 코드를 만들어요.</div>
-    <div class="tip">가족 코드를 아는 휴대폰만 기록을 볼 수 있어요. 코드는 가족끼리만 나눠 주세요. 아이 이름은 별명으로 써도 돼요.</div>
+    <div>이 휴대폰의 자녀·항목·통장 기록을 동기화 서버(Google Firebase)에 올리고 가족 코드를 만들어요.</div>
+    <div class="tip">가족 코드를 아는 휴대폰만 기록을 볼 수 있어요. 코드는 가족끼리만 나눠 주세요. 자녀 이름은 별명으로 써도 돼요.</div>
     <button class="btn full" style="background:var(--green)" id="cfBtn" onclick="doCreateFamily()">가족 만들기</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
 }
@@ -822,7 +907,7 @@ function doCreateFamily(){
 }
 function askJoinFamily(){
   openModal(`<h3>가족 코드 입력하기</h3>
-    <div class="warn">참여하면 <b>이 휴대폰의 지금 기록은 가족 기록으로 바뀌어요.</b> 필요하면 먼저 설정의 백업을 저장해 두세요.</div>
+    <div class="warn">참여하면 <b>이 휴대폰의 지금 기록은 가족 기록으로 바뀌어요.</b> 필요하면 먼저 「더보기 → 백업·초기화」에서 백업을 저장해 두세요.</div>
     <input id="joinCode" class="codein" placeholder="ABCD-EFGH" maxlength="9" autocomplete="off">
     <button class="btn full" style="background:var(--green)" id="joinBtn" onclick="doJoin()">참여하기</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
@@ -832,7 +917,7 @@ function doJoin(){
   btn.disabled=true; btn.textContent='가족 기록 받는 중…';
   Sync.join(code).then(c=>call('getInitData')).then(d=>{
     closeModal(); applyInit(d);
-    if(!d.ready){toast('가족에 아직 아이가 없어요');return renderSetup()}
+    if(!d.ready){toast('가족에 아직 자녀가 없어요');return renderSetup()}
     S.tab='manage';S.date=null;S.month=null;
     document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab==='manage'));
     startMain(); toast('가족과 연결됐어요! 👨‍👩‍👧');
@@ -842,7 +927,7 @@ function appUrl(){return location.origin+location.pathname.replace(/[^/]*$/,'')}
 function inviteMsg(){
   const code=Sync.shareCode(S.family);
   return `[용돈 받아라] 가족 초대 👨‍👩‍👧
-우리 아이 용돈 통장을 함께 써요!
+우리 자녀 용돈 통장을 함께 써요!
 
 ① 아래 링크를 눌러 앱을 열어 주세요
 ${appUrl()}?join=${S.family}
@@ -888,7 +973,7 @@ function askLeaveNormal(n){
 }
 function askDestroyFamily(){
   openModal(`<h3>가족 데이터 모두 삭제</h3>
-    <div class="warn">서버에 있는 이 가족의 아이·항목·통장 기록이 <b>모두 지워지고 되돌릴 수 없어요.</b> 이 휴대폰의 기록도 지워지고, 다른 휴대폰은 연결이 끊겨요(그 휴대폰에 있던 기록은 남음).</div>
+    <div class="warn">서버에 있는 이 가족의 자녀·항목·통장 기록이 <b>모두 지워지고 되돌릴 수 없어요.</b> 이 휴대폰의 기록도 지워지고, 다른 휴대폰은 연결이 끊겨요(그 휴대폰에 있던 기록은 남음).</div>
     <label class="f">확인을 위해 <b>지우기</b> 라고 입력해 주세요</label><input id="dfConfirm">
     <button class="btn full red" id="dfBtn" onclick="doDestroyFamily()">모두 삭제</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
@@ -956,7 +1041,7 @@ function doImport(input){
 }
 function askReset(){
   openModal(`<h3>모든 기록 지우기</h3>
-    <div class="warn">아이·항목·통장 기록이 모두 지워지고 되돌릴 수 없어요. 먼저 백업 파일을 저장해 두세요.</div>
+    <div class="warn">자녀·항목·통장 기록이 모두 지워지고 되돌릴 수 없어요. 먼저 백업 파일을 저장해 두세요.</div>
     <label class="f">확인을 위해 <b>지우기</b> 라고 입력해 주세요</label><input id="rConfirm">
     <button class="btn full red" onclick="doReset()">모두 지우기</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);

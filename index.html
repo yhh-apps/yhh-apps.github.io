@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>용돈 받아라 - 생활습관·경제교육</title>
-<meta name="description" content="좋은 습관을 실천하면 용돈이 쌓여요. 벌고, 쓰고, 저축하며 배우는 우리 아이 생활습관·경제교육 앱">
+<meta name="description" content="좋은 습관을 실천하면 용돈이 쌓여요. 벌고, 쓰고, 저축하며 배우는 우리 자녀 생활습관·경제교육 앱">
 <meta name="theme-color" content="#FF9F43">
 <script>
   /* 카카오톡 안의 브라우저로 열리면 기록이 카톡 안에만 저장되고 앱 설치도 안 돼서, 크롬(기본 브라우저)으로 다시 열기 */
@@ -160,6 +160,12 @@
   .demobar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#EEF6FF;color:#2D5B9A;
     border-radius:14px;padding:10px 12px;font-size:13px;margin-bottom:12px}
   .demobar .btn{flex:0 0 auto;background:var(--blue)}
+  .demobar.big{padding:12px 12px 12px 14px;border:2px solid #CFE2FF;gap:10px}
+  .demobar.big .dico{font-size:30px;line-height:1;flex:0 0 auto}
+  .demobar.big .dtxt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .demobar.big .dtxt b{font-size:17px;line-height:1.3}
+  .demobar.big .dtxt span{font-size:14px;opacity:.85}
+  .demobar.big .btn{font-size:15px;padding:10px 14px;line-height:1.3;border-radius:14px;text-align:center}
   /* 플러스 */
   .jars{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}
   .jar{border-radius:12px;padding:8px;text-align:center;font-size:12px;min-width:0}
@@ -167,6 +173,25 @@
   .jar b{display:block;font-family:'Jua',sans-serif;font-weight:400;font-size:17px;margin-top:2px}
   .jar.spend{background:#FFF1DC} .jar.save{background:#E6F0FF} .jar.give{background:#FDEBF3}
   .bankline{background:#EEF4FF;border-radius:12px;padding:8px 10px;margin-top:10px;font-size:13px;color:#2D5B9A}
+  .plusstar{font-size:.85em}
+  .emopick{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+  .emopick button{font-size:26px;padding:6px 0;border:2px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}
+  .emopick button.on{border-color:var(--main);background:var(--soft)}
+  .ver{color:#C9BBAE;font-size:12px;text-align:center;margin-top:14px}
+  /* 더보기 아이콘 모음 */
+  .moregrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .mtile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:104px;padding:12px 6px;
+    background:var(--card);border:0;border-radius:18px;box-shadow:0 2px 0 var(--line);cursor:pointer;font-family:inherit;color:var(--ink)}
+  .mtile:active{background:var(--soft)}
+  .mico{font-size:30px;line-height:1.1}
+  .mlab{font-size:14px;font-weight:700;text-align:center;line-height:1.3}
+  .msub{font-size:11px;color:var(--main-d);background:var(--soft);border-radius:99px;padding:1px 8px}
+  details.fold{background:var(--card);border-radius:18px;margin-bottom:12px;box-shadow:0 2px 0 var(--line)}
+  details.fold summary{list-style:none;cursor:pointer;padding:14px 16px;font-family:'Jua',sans-serif;font-size:17px;display:flex;justify-content:space-between;align-items:center}
+  details.fold summary::-webkit-details-marker{display:none}
+  details.fold summary::after{content:'펼치기 ›';font-family:inherit;font-size:12px;color:var(--sub)}
+  details.fold[open] summary::after{content:'접기 ‹'}
+  details.fold .fbody{padding:0 16px 14px}
   .plustag{display:inline-block;font-size:11px;background:#F1EAFF;color:#7C5CE0;border-radius:99px;padding:1px 7px;margin-left:4px;vertical-align:middle}
   .pluscard{background:linear-gradient(135deg,#F3EEFF,#FFF1DC);border:2px solid #E3D6FF;border-radius:18px;padding:14px 16px;margin-bottom:12px;cursor:pointer}
   .promo{display:inline-block;margin-top:8px;background:#7C5CE0;color:#fff;border-radius:99px;padding:4px 10px;font-size:12px;font-weight:700}
@@ -197,7 +222,7 @@
     .contract.print{border:0;font-size:15px}
     .album{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   }
-  /* 아이 참여 */
+  /* 자녀 참여 */
   .kidhead{background:linear-gradient(160deg,#FFF1DC,#E6F7EE)}
   .kidnote{background:#FFF5F5;border:1px solid #F5B5BA}
   .pendbar{background:#7C5CE0;color:#fff;border-radius:14px;padding:12px 14px;margin-bottom:12px;font-weight:700;cursor:pointer}
@@ -223,8 +248,10 @@
   <h1>💰 용돈 받아라</h1>
   <div class="tagline">생활습관 · 경제교육 — 습관이 쌓이면 용돈이 쌓여요</div>
   <div class="demobar hide" id="inappBar" style="background:#FFF0F0;color:#B23A48">⚠️ 앱 안의 브라우저로 열려 있어요. 오른쪽 위 메뉴에서 「다른 브라우저로 열기」(크롬)를 눌러 주세요. 그래야 기록이 안전하게 저장되고 앱을 설치할 수 있어요.</div>
-  <div class="demobar hide" id="demoBar">👀 예시 자료로 둘러보는 중이에요. 마음껏 눌러 보세요!
-    <button class="btn sm" onclick="askEndDemo()">내 아이로 시작하기</button></div>
+  <div class="demobar big hide" id="demoBar">
+    <span class="dico">👀</span>
+    <div class="dtxt"><b>예시로 둘러보는&nbsp;중</b><span>마음껏 눌러 보세요!</span></div>
+    <button class="btn" onclick="askEndDemo()">내 자녀로<br>시작하기</button></div>
   <div class="kids" id="kids"></div>
   <div id="view"><div class="loading">불러오는 중…</div></div>
 </div>
@@ -232,8 +259,8 @@
 <nav class="tabs hide" id="tabs">
   <button class="tab on" data-tab="check"><b>✅</b>실천 체크</button>
   <button class="tab" data-tab="ledger"><b>📒</b>통장</button>
-  <button class="tab" data-tab="items"><b>🧩</b>아이·항목</button>
-  <button class="tab" data-tab="manage"><b>⚙️</b>설정</button>
+  <button class="tab" data-tab="items"><b>🧩</b>자녀·항목</button>
+  <button class="tab" data-tab="manage"><b>☰</b>더보기</button>
 </nav>
 
 <div class="modal" id="modal" onclick="if(event.target===this)closeModal()"><div class="sheet" id="sheet"></div></div>
