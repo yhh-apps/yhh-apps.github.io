@@ -88,6 +88,7 @@ function kidPlusBadges(k){
   const b=[];
   if(Number(k.interestRate)>0) b.push(`<span class="badge">🏦 이자 월 ${k.interestRate}%</span>`);
   if(k.jars&&k.jars.on) b.push(`<span class="badge">🫙 ${k.jars.spend}/${k.jars.save}/${k.jars.give}</span>`);
+  b.push(k.consentAt?'<span class="badge need">📸 사진 인증 켜짐</span>':'<span class="badge off">📸 사진 인증 꺼짐</span>');
   // 줄 전체를 누르면 자녀 수정 창이 열리므로, 바로가기 칩은 그 클릭이 위로 전달되지 않게 막음
   return `${b.length?`<div style="margin-top:4px">${b.join('')}</div>`:''}
     <div class="kchips">

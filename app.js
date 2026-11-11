@@ -230,7 +230,15 @@ function renderSetup(){
   if(!adultOk()){ if(isKidDevice()) return renderKidStart(); afterAge=renderSetup; return renderAgeGate(); }
   // 첫 화면은 「이름 넣고 시작하기」 하나만 크게, 나머지 시작 방법은 한 줄씩 (누르면 창으로 자세히)
   const sync=Sync.available();
-  $('view').innerHTML=`<div class="card setupcard">
+  // Android 앱은 크롬(웹)과 기록을 따로 저장해서, 웹에서 쓰던 가족은 옮겨 오는 방법을 먼저 알려 줌
+  const moveHtml=NATIVE?`<div class="card movecard">
+    <div class="jua" style="font-size:18px">📲 크롬에서 쓰던 기록이 있나요?</div>
+    <div class="muted" style="margin-top:4px">크롬(웹)으로 쓰던 기록은 이 앱으로 자동으로 오지 않아요. 아래 방법 중 하나로 옮겨 주세요.</div>
+    <div class="grid2">
+      ${sync?`<button class="mtile" onclick="openJoinSetup()"><span class="mico">👨‍👩‍👧</span><span class="mlab">가족 코드로 옮기기</span><span class="msub">크롬 앱 「더보기 → 가족 연결」 코드</span></button>`:''}
+      <button class="mtile" onclick="$('importFile').click()"><span class="mico">📂</span><span class="mlab">백업 파일로 옮기기</span><span class="msub">크롬 앱 「더보기 → 백업 저장」 파일</span></button>
+    </div></div>`:'';
+  $('view').innerHTML=moveHtml+`<div class="card setupcard">
     <div class="jua" style="font-size:21px">👋 자녀 이름을 알려 주세요</div>
     <div id="setupKids"><div class="kidrow"><input class="skid" placeholder="예: 첫째 (별명도 좋아요)"></div></div>
     <button class="btn sm ghost" style="margin-top:8px" onclick="addSetupKid()">+ 자녀 더 추가</button>
@@ -1141,13 +1149,16 @@ function askKidSwitch(kidId){
   openModal(`<h3>🧒 ${esc(callName(k.name))}의 화면으로 전환</h3>
     <div class="muted">부모 비밀번호를 넣으면 바로 바뀌어요. 돌아올 때도 같은 비밀번호를 써요.</div>
     <input id="ksPin" type="password" inputmode="numeric" autocomplete="off" style="margin-top:10px;text-align:center;letter-spacing:6px" onkeydown="if(event.key==='Enter')doKidSwitch('${kidId}')">
+    ${k.consentAt?'':`<div class="warn" style="margin-top:10px"><b>📸 사진 인증 허락 (선택)</b><br>자녀가 「했어요!」와 함께 찍은 사진은 작게 줄여 가족 서버를 거쳐 부모에게 보이고, <b>승인하거나 반려하면 바로 지워져요.</b> 만 14세 미만 자녀의 사진이라 보호자 동의가 필요해요.
+      <label class="ck"><input type="checkbox" id="ksConsent"> 보호자로서 동의하고 사진 인증을 켤게요</label></div>`}
     <button class="btn full" id="ksBtn" onclick="doKidSwitch('${kidId}')">전환하기</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
   setTimeout(()=>{const p=$('ksPin');if(p)p.focus()},50);
 }
 function doKidSwitch(kidId){
   const b=$('ksBtn'); if(b) b.disabled=true;
-  call('verifyPin',$('ksPin').value).then(()=>call('setKidRole',kidId,true)).then(d=>{
+  const consent=$('ksConsent')&&$('ksConsent').checked;
+  call('verifyPin',$('ksPin').value).then(()=>consent?call('setKidConsent',kidId):null).then(()=>call('setKidRole',kidId,true)).then(d=>{
     applyInit(d); closeModal(); setTab('check'); toast('자녀 화면이에요! 「했어요!」를 눌러 보세요');
   }).catch(e=>{ if(b) b.disabled=false; toast(errMsg(e)); const p=$('ksPin'); if(p) p.value=''; });
 }

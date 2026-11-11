@@ -458,6 +458,15 @@
     k.consentAt = today_();
     return getInitData();
   }
+  /** 보호자 동의 철회: 사진 인증을 끄고, 확인을 기다리는 요청의 사진도 바로 지움 (요청 자체는 사진 없이 남음) */
+  function revokeKidConsent(kidId) {
+    need_();
+    if (role_() !== 'parent') throw new Error('부모님만 바꿀 수 있어요.');
+    const k = D.kids.find(x => x.id === kidId); if (!k) throw new Error('자녀를 확인해 주세요.');
+    delete k.consentAt;
+    D.requests.forEach(r => { if (r.kidId === kidId && r.photo) r.photo = ''; });
+    return getInitData();
+  }
 
   const PHOTO_RE = /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/;
   /** 자녀: 「했어요!」 요청 (사진 선택) — 부모가 승인하면 체크 */
@@ -841,7 +850,7 @@
   /* ===================== 호출 창구 ===================== */
 
   const API = {
-    accrueInterest, addCheer, setRole, setKidRole, exitKidRole, setKidConsent, submitRequest, listRequests,
+    accrueInterest, addCheer, setRole, setKidRole, exitKidRole, setKidConsent, revokeKidConsent, submitRequest, listRequests,
     approveRequest, rejectRequest, dismissRequest, setKidGoals, setPay, setAccount, getContract, saveContract, getAlbum,
     getInitData, setupApp, loadDemo, getDay, setCount, addSpend, addBonus, deleteBonus, addTransfer, deleteSpend,
     getLedger, verifyPin, setPin, saveItem, deleteItem, saveKid, deleteKid, exportData, importData, resetAll

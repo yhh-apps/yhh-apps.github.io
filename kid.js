@@ -39,7 +39,7 @@ function renderKidDay(){
         <div class="amt">+${won(i.amount)}</div></div>
       <div class="row" style="margin-top:8px">
         <div class="muted">${per} ${i.count}/${i.maxCount}번 ${'⭐'.repeat(i.count)}${p?` · ⏳ 확인 중 ${p}`:''}</div>
-        ${left>0?`<button class="btn sm" style="background:var(--green)" onclick="openDidIt('${i.id}')">📸 했어요!</button>`:`<span class="badge need">${p?'확인 기다려요':'다 했어요 🎉'}</span>`}
+        ${left>0?didBtnHtml(i.id,k):`<span class="badge need">${p?'확인 기다려요':'다 했어요 🎉'}</span>`}
       </div></div>`;
   }).join('')||'<div class="card muted">아직 할 일이 없어요.</div>';
   if(fines.length) h+=`<div class="sec">⚠️ 지켜야 할 약속</div><div class="card">${fines.map(i=>`<div class="est"><span>${esc(i.name)}</span><span class="out">${won(i.amount)}</span></div>`).join('')}</div>`;
@@ -57,6 +57,18 @@ function spendGoalHtml(g){
     <div class="muted">${over?'목표보다 '+won(g.used-g.limit)+' 더 썼어요. 다음 달엔 조금 아껴 볼까요?':'앞으로 '+won(g.limit-g.used)+' 남았어요'}</div></div>`;
 }
 
+/* 「했어요!」 버튼: 사진 허락을 받은 자녀는 누르면 바로 카메라 → 찍으면 보내기 창. 허락이 없으면 보내기 창만 */
+function didBtnHtml(itemId,k){
+  if(k.consentAt&&S.plus.active) return `<span class="didwrap"><button class="del" onclick="openDidIt('${itemId}')">사진 없이</button>
+    <label class="btn sm" style="background:var(--green)"><input type="file" accept="image/*" capture="environment" class="hide" onchange="pickPhotoFor('${itemId}',this)">📸 했어요!</label></span>`;
+  return `<button class="btn sm" style="background:var(--green)" onclick="openDidIt('${itemId}')">📸 했어요!</button>`;
+}
+function pickPhotoFor(itemId,input){
+  const f=input.files&&input.files[0]; input.value=''; if(!f) return;
+  shrinkPhoto(f).then(url=>{openDidIt(itemId);didPhoto=url;const im=$('didPrev');if(im){im.src=url;im.classList.remove('hide')}})
+    .catch(()=>toast('사진을 불러오지 못했어요'));
+}
+
 /* 「했어요!」 — 사진(선택) + 한마디 → 엄마·아빠에게 */
 let didPhoto='';
 function openDidIt(itemId){
@@ -65,9 +77,9 @@ function openDidIt(itemId){
   const canPhoto=!!k.consentAt;
   openModal(`<h3>📸 ${esc(it.name)}</h3>
     <div class="muted">했다는 걸 보여 주면 엄마·아빠가 확인하고 +${won(it.amount)}을 넣어 줘요.</div>
-    ${canPhoto?`<label class="photobtn"><input type="file" accept="image/*" capture="environment" onchange="pickPhoto(this)">📷 사진 찍기</label>
+    ${canPhoto?`<label class="photobtn"><input type="file" accept="image/*" capture="environment" onchange="pickPhoto(this)">📷 사진 찍기 · 다시 찍기</label>
     <img id="didPrev" class="didprev hide" alt="">
-    <div class="muted" style="margin-top:4px">사진은 엄마·아빠가 확인하면 바로 지워져요.</div>`:'<div class="tip">사진 인증은 엄마·아빠가 허락하면 쓸 수 있어요. 지금은 「했어요!」만 보낼게요.</div>'}
+    <div class="muted" style="margin-top:4px">사진은 엄마·아빠가 확인하면 바로 지워져요.</div>`:'<div class="tip">사진 인증은 엄마·아빠가 허락하면 쓸 수 있어요(「자녀 화면 전환」 때 허락). 지금은 「했어요!」만 보낼게요.</div>'}
     <label class="f">한마디 (선택)</label><input id="didMemo" placeholder="예: 혼자서 다 했어요!">
     <button class="btn full" style="background:var(--green)" id="didBtn" onclick="sendDidIt('${itemId}')">엄마·아빠에게 보내기</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
@@ -110,12 +122,33 @@ function renderKidGoals(){
       <div class="muted" style="margin-top:4px">꼭 필요한 것은 빼고, 갖고 싶은 것에 쓰는 돈만 세요.</div>
       <button class="btn full" style="background:var(--green)" id="gBtn" onclick="saveKidGoals()">목표 저장하기</button></div>
     <div class="tip">💡 목표를 정하면 통장 화면에 얼마나 모았는지, 얼마나 썼는지 막대로 보여 줘요.</div>
-    ${S.kidRole&&S.kidRole.fromParent?`<div class="card"><button class="btn full ghost" onclick="askExitKid()">👨‍👩‍👧 부모 화면으로 돌아가기</button></div>`:''}`;
+    ${S.kidRole&&S.kidRole.fromParent?`<div class="card"><button class="btn full ghost" onclick="askExitKid()">👨‍👩‍👧 부모 화면으로 돌아가기</button></div>`
+      :`<button class="dangerlink" onclick="askStopKidDevice()">이 기기에서 자녀 화면 그만 쓰기</button>`}`;
 }
 function saveKidGoals(){
   $('gBtn').disabled=true;
   call('setKidGoals',S.kidId,{goalName:$('gName').value,goalAmount:Number($('gAmt').value),spendGoal:Number($('gSpend').value)})
     .then(d=>{applyInit(d);toast('🎯 목표를 정했어요! 화이팅');$('gBtn').disabled=false}).catch(e=>{$('gBtn').disabled=false;toast(errMsg(e))});
+}
+/* 자녀 전용 기기(가족 코드·초대 링크로 시작): 가족 코드를 맞게 넣어야 이 기기를 처음 상태로 되돌림.
+   가족에서만 빠지고(서버의 가족 기록은 그대로) 이 기기 기록만 지움 → 부모 휴대폰·태블릿으로 다시 쓸 수 있음 */
+function askStopKidDevice(){
+  openModal(`<h3>이 기기에서 자녀 화면 그만 쓰기</h3>
+    <div>이 기기를 처음 상태로 되돌려요. 가족의 다른 휴대폰과 서버 기록은 그대로예요.</div>
+    <div class="muted" style="margin-top:6px">엄마·아빠 확인을 위해 <b>가족 코드</b>를 넣어 주세요. (부모 휴대폰 「더보기 → 가족 연결」)</div>
+    <input id="skCode" class="codein" placeholder="ABCD-EFGH" maxlength="9" autocomplete="off" style="margin-top:10px">
+    <button class="btn full red" id="skBtn" onclick="doStopKidDevice()">그만 쓰기</button>
+    <button class="btn full ghost" onclick="closeModal()">취소</button>`);
+}
+function doStopKidDevice(){
+  const code=$('skCode').value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!S.family||code!==S.family){toast('가족 코드가 맞지 않아요');return}
+  const b=$('skBtn'); b.disabled=true; b.textContent='되돌리는 중…';
+  Sync.leave().then(()=>call('resetAll')).then(()=>{
+    try{localStorage.removeItem('ageKid');localStorage.removeItem('adultOk')}catch(e){}
+    closeModal(); S.kids=[]; S.family=null; S.role='parent'; S.kidRole=null; S.tab='check'; S.date=null; S.month=null;
+    setTabLabels(); renderSetup(); toast('처음 상태로 되돌렸어요');
+  }).catch(e=>{b.disabled=false;b.textContent='그만 쓰기';toast(errMsg(e))});
 }
 function askExitKid(){
   openModal(`<h3>부모 화면으로 돌아가기</h3><div class="muted">앱 잠금 비밀번호를 입력해 주세요.</div>
@@ -165,7 +198,8 @@ function openKidAccess(kidId){
   const k=S.kids.find(x=>x.id===kidId);
   openModal(`<h3>🧒 ${esc(callName(k.name))}의 자녀 화면</h3>
     <div>자녀가 직접 실천하고 「📸 했어요!」를 보내면, 엄마·아빠가 확인하고 승인해요. 저축·소비 목표도 자녀가 정할 수 있어요.</div>
-    ${k.consentAt?`<div class="tip">✅ 보호자 동의 완료 (${esc(k.consentAt)})</div>`:`<div class="warn">
+    ${k.consentAt?`<div class="tip">✅ 사진 인증 보호자 동의 완료 (${esc(k.consentAt)})
+      <div style="margin-top:4px"><button class="del" onclick="askRevokeConsent('${kidId}')">동의 철회 (사진 인증 끄기)</button></div></div>`:`<div class="warn">
       <b>보호자 동의</b><br>자녀가 찍은 실천 사진은 작게 줄여 가족 서버(Google Firebase)를 거쳐 부모 휴대폰에 보이고, <b>승인하거나 반려하면 바로 지워져요.</b>
       사진은 다른 목적으로 쓰지 않아요. 만 14세 미만 자녀의 사진이라 법정대리인인 보호자의 동의가 필요해요.
       <label class="ck"><input type="checkbox" id="kcOk"> 보호자로서 위 내용에 동의해요</label></div>`}
@@ -173,6 +207,14 @@ function openKidAccess(kidId){
     <button class="btn full ghost" onclick="kidModeHere('${kidId}')">이 휴대폰을 자녀 모드로 바꾸기</button>
     <div class="muted" style="margin-top:6px">자녀 모드에서 부모 화면으로 돌아올 때는 앱 잠금 비밀번호를 입력해요.</div>
     <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
+}
+function askRevokeConsent(kidId){
+  const k=S.kids.find(x=>x.id===kidId);
+  openModal(`<h3>📸 사진 인증 동의 철회</h3>
+    <div>${esc(callName(k.name))}의 사진 인증을 끌까요?</div>
+    <div class="muted" style="margin-top:6px">앞으로 「했어요!」는 사진 없이만 보낼 수 있고, 확인을 기다리는 요청에 있던 사진도 바로 지워져요. 다시 켜려면 동의를 새로 하면 돼요.</div>
+    <button class="btn full red" onclick="this.disabled=true;call('revokeKidConsent','${kidId}').then(d=>{applyInit(d);toast('사진 인증 동의를 철회했어요');openKidAccess('${kidId}');render()}).catch(e=>{this.disabled=false;toast(errMsg(e))})">동의 철회</button>
+    <button class="btn full ghost" onclick="openKidAccess('${kidId}')">취소</button>`);
 }
 function ensureConsent(kidId){
   const k=S.kids.find(x=>x.id===kidId);
