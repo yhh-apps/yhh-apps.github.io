@@ -306,20 +306,16 @@ function renderDay(){
   if(!d.items.length) h+='<div class="card muted">등록된 항목이 없어요. 「자녀·항목」 탭에서 항목을 추가해 주세요.</div>';
   const extras=(d.interests||[]).map(x=>`<div class="row" style="padding:4px 0"><span>🏦 ${esc(x.name)}</span><span class="bonus">+${won(x.amount)}</span></div>`).join('')
     +(d.cheers||[]).map(c=>`<div class="row" style="padding:4px 0"><span>💌 ${esc(c.name)}</span>${isGp()?'':`<button class="del" onclick="askDelBonus('${c.id}',0)">삭제</button>`}</div>`).join('');
-  h+=`<div class="sec">🎁 특별 보너스 <span class="muted">(받은 용돈·칭찬·응원)</span></div>
-    <div class="bcard">
-      ${extras}
-      ${d.bonuses.length?d.bonuses.map(b=>`<div class="row" style="padding:4px 0"><span>🎁 ${esc(b.name)}</span>
-        <span><span class="bonus">+${won(b.amount)}</span> ${isGp()?'':`<button class="del" onclick="askDelBonus('${b.id}',${b.amount})">삭제</button>`}</span></div>`).join('')
-        :(extras?'':'<div class="muted">할머니·할아버지, 친척, 지인에게 받은 용돈을 여기에 넣어요.(현금 실물은 부모님이 보관)</div>')}
-      ${isGp()?`<button class="btn full" style="background:#FFB020" onclick="openCheer()">💌 응원·용돈 보내기</button>`
-        :`<button class="btn full" style="background:#FFB020" onclick="openBonus()">+ 보너스 넣기</button>`}
+  const blines=extras+d.bonuses.map(b=>`<div class="row" style="padding:4px 0"><span>🎁 ${esc(b.name)}</span>
+        <span><span class="bonus">+${won(b.amount)}</span> ${isGp()?'':`<button class="del" onclick="askDelBonus('${b.id}',${b.amount})">삭제</button>`}</span></div>`).join('');
+  // 특별 보너스: 제목 한 줄 + 넣기 버튼, 받은 게 있을 때만 목록
+  h+=`<div class="bonusbox">
+      <div class="row"><span class="jua" style="font-size:17px">🎁 특별 보너스</span>
+        ${isGp()?`<button class="btn sm" style="background:#FFB020" onclick="openCheer()">💌 응원·용돈 보내기</button>`
+          :`<button class="btn sm" style="background:#FFB020" onclick="openBonus()">+ 넣기</button>`}</div>
+      ${blines?`<div style="margin-top:6px">${blines}</div>`:''}
     </div>
-    <div class="sharecard ${isGp()?'hide':''}">
-      <div class="jua" style="font-size:18px">💬 ${d.date===d.today?'오늘':shortDate(d.date)} 결과를 ${esc(callName(k.name))}에게 보내 볼까요?</div>
-      <div class="muted" style="margin-top:4px">한 일, 모은 돈, 잔액을 정리해서 카톡·문자로 보낼 수 있어요. 보내기 전에 내용을 보고 한마디 덧붙일 수 있어요.</div>
-      <button class="btn full" style="background:var(--green)" onclick="shareDay()">${d.date===d.today?'오늘':prettyDate(d.date)} 결과 보내기</button>
-    </div>`;
+    ${isGp()?'':shareBtnHtml()}`;
   $('view').innerHTML=h;
 }
 // 세 개의 통장 (플러스)
@@ -435,6 +431,28 @@ function buildMonthMsg(){
 }
 function shareDay(){previewShare(buildDayMsg(),'하루 결과 보내기')}
 function shareMonth(){previewShare(buildMonthMsg(),'한 달 통장 보내기')}
+/* 실천 탭·통장 탭 맨 아래 공통: 한 줄 버튼 → 「그날 실천 결과 / 그달 통장」 중 골라서 보내기 */
+function shareBtnHtml(){
+  return `<button class="sharebtn" onclick="openShare()"><span>💬 ${esc(callName(kid().name))}에게 결과 보내기</span><span class="chev">›</span></button>`;
+}
+function openShare(){
+  const k=kid(), date=S.date||S.today, month=S.tab==='ledger'&&S.month?S.month:date.slice(0,7);
+  S.shareMonth=month;
+  openModal(`<h3>💬 ${esc(callName(k.name))}에게 보내기</h3>
+    <div class="muted">카톡·문자로 보낼 내용을 골라 주세요. 보내기 전에 내용을 보고 한마디 덧붙일 수 있어요.</div>
+    <div class="list" style="margin-top:10px">
+      <button class="lrow" onclick="shareDayNow()"><span class="li">✅</span><span class="lt">${date===S.today?'오늘':prettyDate(date)} 실천 결과</span><span class="chev">›</span></button>
+      <button class="lrow" onclick="shareMonthNow()"><span class="li">📒</span><span class="lt">${Number(month.slice(5))}월 통장</span><span class="chev">›</span></button>
+    </div>
+    <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
+}
+function shareDayNow(){
+  call('getDay',S.kidId,S.date||S.today).then(d=>{S.day=d;shareDay()}).catch(e=>toast(errMsg(e)));
+}
+function shareMonthNow(){
+  call('getLedger',S.kidId,S.shareMonth).then(L=>{ // 통장 탭이 보고 있는 내역(S.ledger)은 건드리지 않음
+    const keep=S.ledger;S.ledger=L;const t=buildMonthMsg();S.ledger=keep;previewShare(t,'한 달 통장 보내기')}).catch(e=>toast(errMsg(e)));
+}
 // 보내기 전 미리보기: 내용을 고치거나 한마디 덧붙인 뒤 보내기/복사
 function previewShare(text,title,noCheer){
   const canShare=!!navigator.share;
@@ -598,13 +616,8 @@ function renderLedger(L){
   }
   h+=`<div class="card"><div class="jua" style="font-size:18px">📒 ${esc(callName(k.name))}의 통장 내역</div>
     <div id="histBox">${historyHtml(L)}</div>`;
-  const mm=Number(L.month.slice(5));
   h+=`</div>
-    <div class="sharecard ${viewOnly()?'hide':''}">
-      <div class="jua" style="font-size:18px">💬 ${mm}월 통장을 ${esc(callName(k.name))}에게 보내 볼까요?</div>
-      <div class="muted" style="margin-top:4px">번 돈, 쓴 돈, 저축, 많이 실천한 것을 정리해서 카톡·문자로 보낼 수 있어요. 보내기 전에 내용을 보고 한마디 덧붙일 수 있어요.</div>
-      <button class="btn full" style="background:var(--green)" onclick="shareMonth()">${mm}월 통장 보내기</button>
-    </div>`;
+    ${viewOnly()?'':shareBtnHtml()}`;
   $('view').innerHTML=h;
   bindWeekSwipe();
 }
