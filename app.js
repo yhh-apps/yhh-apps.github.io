@@ -511,36 +511,41 @@ function shareMonthNow(){
 }
 // 보내기 전 미리보기: 내용을 고치거나 한마디 덧붙인 뒤 보내기/복사
 function previewShare(text,title,noCheer){
-  const canShare=!!navigator.share;
   openModal(`<h3>💬 ${esc(title)}</h3>
     <div class="muted">보낼 내용이에요. 고치거나 한마디 덧붙여도 돼요.</div>
     <textarea id="shareTxt" style="min-height:240px;font-size:14px;margin-top:8px">${esc(text)}</textarea>
     <div class="chips ${noCheer?'hide':''}" style="margin-top:8px">${CHEERS.map((c,i)=>`<button type="button" onclick="addCheer(${i})">${esc(c)}</button>`).join('')}</div>
-    ${canShare?`<button class="btn full" style="background:var(--green)" onclick="sendShare()">카톡·문자로 보내기</button>`:''}
-    <button class="btn full ${canShare?'ghost':''}" onclick="copyShare()">복사하기</button>
-    ${canShare?'':'<div class="muted" style="margin-top:6px">복사한 뒤 카카오톡 등에 붙여 넣어 보내세요.</div>'}
+    <button class="btn full big" style="background:var(--green)" onclick="sendShare()">📤 공유하기</button>
     <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
 }
 const CHEERS=['사랑해 ❤️','자랑스러워 👍','내일도 화이팅 💪','저금 목표까지 조금만 더! 🎯'];
 function addCheer(i){const t=$('shareTxt');t.value=t.value.replace(/\s*$/,'')+'\n'+CHEERS[i];t.scrollTop=t.scrollHeight}
+/* 공유하기: 먼저 복사해 두고(공유 창에서 붙여 넣기도 되게) 휴대폰의 공유 창을 띄움. 공유 창이 없는 곳(컴퓨터 등)은 복사만 */
 async function sendShare(){
   const text=$('shareTxt').value;
-  try{await navigator.share({text:text});closeModal();toast('보냈어요 💬')}
-  catch(e){if(!(e&&e.name==='AbortError'))toast('보내기를 못 했어요. 복사해서 보내 주세요.')}
+  const copied=copyText(text,$('shareTxt'));
+  if(navigator.share){
+    try{await navigator.share({text:text});closeModal();toast('보냈어요 💬');return}
+    catch(e){if(e&&e.name==='AbortError'){copied.then(ok=>{if(ok)toast('복사해 두었어요. 필요하면 붙여 넣어 보내세요')});return}}
+  }
+  copied.then(ok=>toast(ok?'복사했어요. 카카오톡 등에 붙여 넣어 보내세요':'직접 길게 눌러 복사해 주세요'));
 }
-async function shareText(text){ // 가족 코드 보내기 등 바로 보내기
+function copyText(text,ta){ // 복사 성공하면 true
+  if(navigator.clipboard&&navigator.clipboard.writeText) return navigator.clipboard.writeText(text).then(()=>true).catch(()=>execCopy(text,ta));
+  return Promise.resolve(execCopy(text,ta));
+}
+function execCopy(text,ta){
+  try{ if(!ta){ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);}
+    ta.select(); const ok=document.execCommand('copy'); if(!ta.id) ta.remove(); return ok; }catch(e){return false}
+}
+async function shareText(text){ // 가족 코드 보내기 등 바로 보내기 (복사도 같이)
+  copyText(text);
   if(navigator.share){
     try{await navigator.share({text:text});return}
     catch(e){if(e&&e.name==='AbortError')return}
   }
   previewShare(text,'보낼 내용');
 }
-function copyShare(){
-  const t=$('shareTxt');
-  (navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(()=>toast('복사했어요'))
-    .catch(()=>{t.select();try{document.execCommand('copy');toast('복사했어요')}catch(e){toast('직접 길게 눌러 복사해 주세요')}});
-}
-
 /* ---------- 특별 보너스 ---------- */
 const BONUS_FROM=['할머니','할아버지','외할머니','외할아버지','친척','지인','칭찬 보너스'];
 function openBonus(){
@@ -553,7 +558,6 @@ function openBonus(){
     <label class="f">금액(원)</label><input id="bAmt" type="number" inputmode="numeric" step="1000">
     <label class="f">날짜</label><input id="bDate" type="date" value="${S.date||S.today}" max="${S.today}">
     <label class="f">메모 (선택)</label><input id="bMemo" placeholder="예: 추석, 생일 축하">
-    <div class="tip">💡 받은 돈 중 얼마를 실물 통장에 저축할지 자녀와 함께 정해 보세요.</div>
     <button class="btn full" id="bBtn" onclick="doBonus()">통장에 넣기</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
 }
@@ -801,8 +805,7 @@ function renderItems(){
   h+=`<div class="card"><div class="row"><div class="jua" style="font-size:18px">👧 자녀</div><button class="btn sm" onclick="editKid()">+ 자녀 추가</button></div>`+
     S.kids.map(k=>`<div class="mitem tap" onclick="editKid('${k.id}')"><div class="t"><b>${esc(k.emoji)} ${esc(k.name)}</b> <span class="muted">${esc(k.desc)}</span>
       ${k.goalName?`<div class="muted">목표 ${esc(k.goalName)} ${won(k.goalAmount)}</div>`:''}
-      ${kidPlusBadges(k)}</div><span class="chev">›</span></div>`).join('')+`</div>
-    <div class="muted center">📊 한 달 예상 용돈, ⭐ 플러스는 「더보기」에 있어요.</div>`;
+      ${kidPlusBadges(k)}</div><span class="chev">›</span></div>`).join('')+`</div>`;
   $('view').innerHTML=h;
 }
 
@@ -830,7 +833,7 @@ function renderManage(){
       ${tile('🔒','앱 잠금',S.hasPin?'켜짐':'꺼짐','openPin()')}
       ${tile('📜','용돈 계약서','',"pickKidFor('openContract')",1)}
       ${tile('🎖️','성장 앨범','',"pickKidFor('openAlbum')",1)}
-      ${tile('🧒','자녀 화면','',"pickKidFor('openKidAccess')",1)}
+      ${tile('🧒','자녀 화면 전환','',"pickKidFor('askKidSwitch')",1)}
       ${tile('💸','용돈 받을 곳',payOn?'등록됨':'','openPaySettings()',1)}
       ${tile('📊','예상 용돈','',"openMore('est')")}
       ${tile('⭐','플러스',pl.purchased?'구매 완료':pl.promo?'무료 체험 중':'','openPlusPage()')}
@@ -845,8 +848,8 @@ function renderManage(){
 function pickKidFor(fn){
   const go=id=>window[fn](id);
   if(S.kids.length===1) return go(S.kids[0].id);
-  const title={openContract:'📜 용돈 계약서',openAlbum:'🎖️ 성장 앨범',openKidAccess:'🧒 자녀 화면'}[fn]||'';
-  openModal(`<h3>${title}</h3><div class="muted">어느 자녀를 볼까요?</div>
+  const title={askKidSwitch:'🧒 자녀 화면 전환',openContract:'📜 용돈 계약서',openAlbum:'🎖️ 성장 앨범',openKidAccess:'🧒 자녀 화면'}[fn]||'';
+  openModal(`<h3>${title}</h3><div class="muted">${fn==='askKidSwitch'?'어느 자녀 화면으로 바꿀까요?':'어느 자녀를 볼까요?'}</div>
     <div class="list" style="margin-top:10px">${S.kids.map(k=>`<button class="lrow" onclick="${fn}('${k.id}')"><span class="li">${esc(k.emoji)}</span><span class="lt">${esc(k.name)}</span><span class="chev">›</span></button>`).join('')}</div>
     <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
 }
@@ -861,9 +864,12 @@ function openMore(what){
     <div class="muted" style="margin-top:6px">매일 항목 × 30일 + 매주 항목 × 4.3주 기준(벌금 제외)</div>${close}`);
   if(what==='backup') return openModal(`<h3>💾 백업·초기화</h3>
     <div class="muted">기록은 이 휴대폰에 있어요. 가족 연결이나 Google 계정 없이 쓰고 있다면, 가끔 백업 파일을 저장해 두세요.</div>
-    <button class="btn full ghost" onclick="doExport()">📤 백업 파일 저장하기</button>
-    <button class="btn full ghost" onclick="askImport()">📂 백업 파일 불러오기</button>
-    ${close}<button class="dangerlink" onclick="askReset()">모든 기록 지우고 처음부터</button>`);
+    <div class="grid2">
+      <button class="mtile" onclick="doExport()"><span class="mico">📤</span><span class="mlab">백업 저장</span></button>
+      <button class="mtile" onclick="askImport()"><span class="mico">📂</span><span class="mlab">백업 불러오기</span></button>
+      <button class="mtile" onclick="askReset()"><span class="mico">🧹</span><span class="mlab" style="color:var(--red)">모든 기록 지우기</span></button>
+      <button class="mtile" onclick="closeModal()"><span class="mico">↩️</span><span class="mlab">닫기</span></button>
+    </div>`);
   if(what==='info') return openModal(`<h3>📄 정보·문의</h3><div class="list">
       <a class="lrow" href="privacy.html" target="_blank" rel="noopener"><span class="li">📄</span><span class="lt">개인정보처리방침</span><span class="chev">›</span></a>
       <a class="lrow" href="mailto:yhh.apps.help@gmail.com"><span class="li">✉️</span><span class="lt">문의하기</span><span class="lv">yhh.apps.help@gmail.com</span></a>
@@ -1124,4 +1130,26 @@ function doReset(){
 /* ---------- 오프라인 (서비스 워커) ---------- */
 if('serviceWorker' in navigator && location.protocol!=='file:' && !NATIVE){ // Android 앱은 파일이 앱 안에 있어서 오프라인 저장이 필요 없음
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+
+/* 더보기 「자녀 화면 전환」: 부모 비밀번호를 넣으면 바로 이 휴대폰을 자녀 화면으로 (돌아올 때도 같은 비밀번호) */
+function askKidSwitch(kidId){
+  if(!requirePlus()) return;
+  const k=S.kids.find(x=>x.id===kidId); if(!k) return;
+  if(!S.hasPin) return openModal(`<h3>🧒 자녀 화면 전환</h3>
+    <div>자녀 화면에서 부모 화면으로 돌아올 때 쓸 <b>앱 잠금 비밀번호</b>를 먼저 정해 주세요.</div>
+    <button class="btn full" onclick="openPin()">비밀번호 정하기</button>
+    <button class="btn full ghost" onclick="closeModal()">취소</button>`);
+  openModal(`<h3>🧒 ${esc(callName(k.name))}의 화면으로 전환</h3>
+    <div class="muted">부모 비밀번호를 넣으면 바로 바뀌어요. 돌아올 때도 같은 비밀번호를 써요.</div>
+    <input id="ksPin" type="password" inputmode="numeric" autocomplete="off" style="margin-top:10px;text-align:center;letter-spacing:6px" onkeydown="if(event.key==='Enter')doKidSwitch('${kidId}')">
+    <button class="btn full" id="ksBtn" onclick="doKidSwitch('${kidId}')">전환하기</button>
+    <button class="btn full ghost" onclick="closeModal()">취소</button>`);
+  setTimeout(()=>{const p=$('ksPin');if(p)p.focus()},50);
+}
+function doKidSwitch(kidId){
+  const b=$('ksBtn'); if(b) b.disabled=true;
+  call('verifyPin',$('ksPin').value).then(()=>call('setKidRole',kidId,true)).then(d=>{
+    applyInit(d); closeModal(); setTab('check'); toast('자녀 화면이에요! 「했어요!」를 눌러 보세요');
+  }).catch(e=>{ if(b) b.disabled=false; toast(errMsg(e)); const p=$('ksPin'); if(p) p.value=''; });
 }
