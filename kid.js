@@ -234,7 +234,7 @@ ${appUrl()}?join=${S.family}&kid=${kidId}
 
 ② 크롬 메뉴(⋮) → 「앱 설치」를 누르면 자녀 기기에 앱이 생겨요
 
-③ 「${k.name} 화면 시작하기」를 누르면 끝!`,'자녀 기기 초대 보내기',true);
+③ 「내 화면 시작하기」를 누르면 끝!`,'자녀 기기 초대 보내기',true);
   }).catch(()=>{});
 }
 function kidModeHere(kidId){

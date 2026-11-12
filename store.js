@@ -136,7 +136,7 @@
     }
     return false;
   }
-  function needPlus_() { if (!plus_().active) throw new Error('플러스 기능이에요. 「자녀·항목」 탭의 용돈 받아라 플러스에서 시작해 주세요.'); }
+  function needPlus_() { if (!plus_().active) throw new Error('플러스 기능이에요. 「더보기 → 플러스」에서 확인해 주세요.'); }
 
   /** 세 개의 통장 잔액 — 들어온 돈(실천·보너스)을 비율대로 나누고, 이자는 저축 통장, 쓴 돈은 고른 통장에서 뺌 */
   function jarOf_(s) { return JARS.indexOf(s.jar) >= 0 ? s.jar : (s.method === TRANSFER ? 'save' : 'spend'); }
@@ -761,6 +761,8 @@
     D.kids = D.kids.filter(x => x.id !== id);
     D.records = D.records.filter(r => r.kidId !== id);
     D.spends = D.spends.filter(s => s.kidId !== id);
+    D.requests = D.requests.filter(r => r.kidId !== id); // 기다리던 인증 요청(사진)도 함께
+    if (D.contracts) delete D.contracts[id];
     return getInitData();
   }
 
@@ -800,7 +802,11 @@
   const PLUS_DOC = 'plus'; // families/{가족}/meta/plus — 플러스 구매 기록 (결제 확인 서버만 쓰고, 앱은 읽기만)
   let FP = null; // { col: Map(id → 내용 문자열) }
 
-  function stable_(o) { return JSON.stringify(o, Object.keys(o).sort()); }
+  // 내용 비교용 문자열: 이름 순서를 맞춰서 만듦 (안쪽 값 — 세 통장 비율 jars 등 — 까지 포함)
+  function stable_(o) {
+    return JSON.stringify(o, (k, v) => v && typeof v === 'object' && !Array.isArray(v)
+      ? Object.keys(v).sort().reduce((a, x) => { a[x] = v[x]; return a; }, {}) : v);
+  }
   function buildFP_() {
     FP = {};
     COLS.forEach(c => { FP[c] = new Map(); (D ? D[c] : []).forEach(e => FP[c].set(e.id, stable_(e))); });
@@ -870,6 +876,7 @@
       if (!API[fn]) throw new Error('알 수 없는 기능: ' + fn);
       if (fn === 'setupApp' || fn === 'loadDemo') noSync_();
       const before = D;
+      if (!READ_ONLY[fn] && syncing_() && !FP) buildFP_(); // 바꾸기 전 모습을 먼저 기억해야, 앱을 켠 뒤 첫 변경도 가족에게 보내짐
       const out = API[fn].apply(null, args);
       if (!READ_ONLY[fn]) {
         if (fn === 'resetAll') { await clearStore(); }

@@ -303,7 +303,7 @@ function doGpJoin(code){
 }
 function renderGpManage(){
   $('view').innerHTML=`<div class="card"><div class="jua" style="font-size:18px">👵 ${esc(S.gpName||'조부모')} 화면</div>
-      <div class="muted" style="margin-top:4px">손주의 실천과 통장을 볼 수 있고, 「실천 체크」 탭의 <b>💌 응원·용돈 보내기</b>로 마음을 전할 수 있어요. 체크와 지출 기록은 부모님이 해요.</div>
+      <div class="muted" style="margin-top:4px">손주의 실천과 통장을 볼 수 있고, 「통장」 탭의 <b>💌 응원·용돈 보내기</b>로 마음을 전할 수 있어요. 체크와 지출 기록은 부모님이 해요.</div>
       <label class="f">손주가 부르는 이름</label><input id="gpNameEdit" value="${esc(S.gpName)}">
       <button class="btn full ghost" onclick="call('setRole','gp',$('gpNameEdit').value).then(d=>{applyInit(d);toast('바꿨어요')})">이름 바꾸기</button></div>
     ${familyCardHtml()}
@@ -313,7 +313,7 @@ function renderGpManage(){
 }
 function askBeParent(){
   openModal(`<h3>부모 모드로 바꾸기</h3><div>체크·지출 기록과 설정을 모두 할 수 있게 돼요. 부모님 휴대폰일 때만 바꿔 주세요.</div>
-    <button class="btn full" onclick="call('setRole','parent','').then(d=>{applyInit(d);closeModal();renderKids();render();toast('부모 모드로 바꿨어요')})">바꾸기</button>
+    <button class="btn full" onclick="call('setRole','parent','').then(d=>{applyInit(d);closeModal();startMain();toast('부모 모드로 바꿨어요')}).catch(e=>toast(errMsg(e)))">바꾸기</button>
     <button class="btn full ghost" onclick="closeModal()">취소</button>`);
 }
 

@@ -83,6 +83,7 @@ try{
 }catch(e){}
 function applyInvite(){
   if(!INVITE||!Sync.available()) return;
+  if(!S.kids.length&&!INVITE_GP&&!INVITE_KID&&!adultOk()) return; // 나이 확인 화면이 먼저 — 확인이 끝나면 다시 불림
   const c=INVITE; INVITE=null; const shown=Sync.shareCode(c);
   if(!S.kids.length&&INVITE_GP){ renderGpSetup(c); return; } // 조부모 초대
   if(!S.kids.length&&INVITE_KID){ renderKidSetup(c,INVITE_KID); return; } // 자녀 기기 초대
@@ -150,7 +151,10 @@ function applyInit(d){
 }
 function startMain(){
   // 보호자 화면은 어른만: 이 휴대폰에서 나이 확인을 아직 안 했으면 먼저 확인 (자녀·조부모 화면은 건너뜀)
-  if(S.role==='parent'&&!S.kidRole&&!adultOk()){ afterAge=startMain; return renderAgeGate(); }
+  if(S.role==='parent'&&!S.kidRole&&!adultOk()){
+    if(isKidDevice()&&S.family&&S.kids.length) return renderKidPick(); // 자녀 기기가 가족 참여 뒤 이름을 고르기 전에 닫힌 경우: 이름 고르기부터 다시
+    afterAge=startMain; return renderAgeGate();
+  }
   S.locked=false; S.started=true;
   S.date=S.date||S.today; S.month=S.month||S.today.slice(0,7);
   const saved=load('kidId');
@@ -194,8 +198,8 @@ function renderAgeGate(){
 function checkAge(){
   const v=Number($('ageYear').value);
   if(!v){toast('태어난 해를 골라 주세요');return}
-  if(new Date().getFullYear()-v>=ADULT_AGE){ store('adultOk','1'); const f=afterAge||renderSetup; afterAge=null; f(); }
-  else { store('ageKid','1'); renderKidStart(); }
+  if(new Date().getFullYear()-v>=ADULT_AGE){ store('adultOk','1'); const f=afterAge||renderSetup; afterAge=null; f(); applyInvite(); }
+  else { store('ageKid','1'); if(S.family&&S.kids.length) renderKidPick(); else renderKidStart(); }
 }
 /* 자녀가 자기 휴대폰에서 처음 열었을 때: 가족 코드 → 내 이름 고르기 → 광고 없는 자녀 화면 */
 function renderKidStart(){
@@ -204,7 +208,7 @@ function renderKidStart(){
     <div style="font-size:54px">🧒</div>
     <div class="jua" style="font-size:22px">내 용돈 통장 시작!</div>
     <div style="margin-top:6px">엄마·아빠에게 <b>가족 코드</b>를 받아서 넣어 주세요.</div>
-    <input id="kidCode" class="codein" placeholder="ABCD-EFGH" maxlength="9" autocomplete="off" style="margin-top:12px">
+    <input id="kidCode" class="codein" placeholder="ABCD-EFGH" maxlength="9" autocomplete="off" style="margin-top:12px" value="${INVITE&&Sync.available()?esc(Sync.shareCode(INVITE)):''}">
     <button class="btn full big" style="background:var(--green)" id="kidCodeBtn" onclick="doKidCodeJoin()">다음</button>
     <div class="muted" style="margin-top:8px">엄마·아빠 휴대폰의 「더보기 → 가족 연결」에 가족 코드가 있어요.</div>
   </div>`;
@@ -215,9 +219,13 @@ function doKidCodeJoin(){
   Sync.join($('kidCode').value).then(()=>call('getInitData')).then(d=>{
     applyInit(d);
     if(!d.kids.length){toast('가족에 아직 자녀가 없어요. 엄마·아빠에게 물어봐요');b.disabled=false;b.textContent='다음';return}
-    $('view').innerHTML=`<div class="card setupcard center"><div class="jua" style="font-size:22px">누구예요?</div>
-      <div class="list" style="margin-top:12px;text-align:left">${d.kids.map(k=>`<button class="lrow" onclick="doKidPick('${k.id}')"><span class="li">${esc(k.emoji)}</span><span class="lt">${esc(k.name)}</span><span class="chev">›</span></button>`).join('')}</div></div>`;
+    INVITE=null; renderKidPick();
   }).catch(e=>{b.disabled=false;b.textContent='다시 시도';toast(errMsg(e))});
+}
+function renderKidPick(){
+  $('tabs').classList.add('hide'); $('kids').innerHTML=''; $('demoBar').classList.add('hide'); updateAd();
+  $('view').innerHTML=`<div class="card setupcard center"><div class="jua" style="font-size:22px">누구예요?</div>
+    <div class="list" style="margin-top:12px;text-align:left">${S.kids.map(k=>`<button class="lrow" onclick="doKidPick('${k.id}')"><span class="li">${esc(k.emoji)}</span><span class="lt">${esc(k.name)}</span><span class="chev">›</span></button>`).join('')}</div></div>`;
 }
 function doKidPick(kidId){
   call('setKidRole',kidId,false).then(d=>{applyInit(d);S.tab='check';S.date=null;S.month=null;startMain();toast('반가워요! 오늘도 화이팅 💪')})
@@ -575,7 +583,8 @@ function doBonus(){
   const b={from:$('bFrom').value,amount:Number($('bAmt').value),date:$('bDate').value,memo:$('bMemo').value};
   $('bBtn').disabled=true;
   call('addBonus',S.kidId,b,S.date||S.today).then(d=>{
-    if(S.tab==='check') S.day=d; closeModal(); render(); // 지금 보는 탭(통장 탭)을 새로 그림 toast('🎁 '+won(b.amount)+' 보너스를 넣었어요!');
+    if(S.tab==='check') S.day=d; closeModal(); render(); // 지금 보는 탭(통장 탭)을 새로 그림
+    toast('🎁 '+won(b.amount)+' 보너스를 넣었어요!');
   }).catch(e=>{$('bBtn').disabled=false;toast(errMsg(e))});
 }
 function askDelBonus(id,amt,fromLedger){
@@ -768,7 +777,7 @@ function lineHtml(l,L){
       left=`<div><b>${shortDate(l.date)}</b> 💌 ${esc(l.name)}</div><div class="names"><span class="badge">응원 메시지</span>${viewOnly()?'':`<button class="del" onclick="askDelBonus('${l.id}',0,true)">삭제</button>`}</div>`;
       amt=`<div class="muted">💌</div>`;
     }else if(l.type==='save'){
-      left=`<div><b>${shortDate(l.date)}</b> 🏦 실물 통장으로 이체</div><div class="names">${esc(l.memo)} <button class="del" onclick="askDelSpend('${l.id}')">삭제</button></div>`;
+      left=`<div><b>${shortDate(l.date)}</b> 🏦 실물 통장으로 이체</div><div class="names">${esc(l.memo)} ${viewOnly()?'':`<button class="del" onclick="askDelSpend('${l.id}')">삭제</button>`}</div>`;
       amt=`<div class="save">-${won(l.amount)}</div>`;
     }else{
       left=`<div><b>${shortDate(l.date)}</b> ${l.method==='현금'?'💵':'💳'} ${esc(l.name)}</div>
@@ -1050,7 +1059,7 @@ function openDestroyFamily(){
   if(S.family) return askDestroyFamily();
   openModal(`<h3>🗑️ 가족 데이터 삭제</h3>
     <div>${S.demo?'예시 자료에서는 쓸 수 없어요.':'지금은 가족 연결이 없어서 서버에 저장된 가족 데이터가 없어요.'}</div>
-    <div class="muted" style="margin-top:6px">이 휴대폰의 기록만 지우려면 「백업·초기화 → 모든 기록 지우고 처음부터」를 써 주세요.</div>
+    <div class="muted" style="margin-top:6px">이 휴대폰의 기록만 지우려면 「백업·초기화 → 모든 기록 지우기」를 써 주세요.</div>
     <button class="btn full ghost" onclick="closeModal()">닫기</button>`);
 }
 function askDestroyFamily(){

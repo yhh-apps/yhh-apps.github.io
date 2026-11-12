@@ -73,7 +73,11 @@
 
   /* ---------- 보내기 ---------- */
   async function push(changes) {
-    if (!familyId || !db) return;
+    if (!familyId) return;
+    if (!db) { // 앱을 켠 직후 서버 준비 전에 바뀐 것도 버리지 않고, 준비되면 보냄
+      try { await ready(); } catch (e) { setStatus('error'); return; }
+      if (!familyId) return;
+    }
     const ts = fb.firestore.FieldValue.serverTimestamp();
     const ops = [];
     Object.keys(changes).forEach(col => {
