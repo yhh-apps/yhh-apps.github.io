@@ -187,13 +187,22 @@ function renderAgeGate(){
   $('tabs').classList.add('hide'); $('kids').innerHTML=''; $('demoBar').classList.add('hide'); closeModal();
   const y=new Date().getFullYear(), years=[];
   for(let i=y;i>=y-100;i--) years.push(i);
-  $('view').innerHTML=`<div class="card setupcard">
-    <div class="jua" style="font-size:21px">👋 반가워요!</div>
-    <div style="margin-top:6px">시작하기 전에 태어난 해를 알려 주세요.</div>
-    <select id="ageYear" style="margin-top:12px;font-size:17px;padding:12px"><option value="">태어난 해 고르기</option>${years.map(v=>`<option value="${v}">${v}년</option>`).join('')}</select>
-    <button class="btn full big" onclick="checkAge()">다음</button>
-    <div class="muted center" style="margin-top:8px">태어난 해는 저장하지 않아요</div>
+  $('view').innerHTML=`<div class="welcome">
+    ${welcomeHeadHtml(true)}
+    <div class="wform">
+      <label class="wq" for="ageYear">시작하기 전에,<br>태어난 해를 알려 주세요</label>
+      <select id="ageYear" class="wselect"><option value="">태어난 해 고르기</option>${years.map(v=>`<option value="${v}">${v}년</option>`).join('')}</select>
+      <button class="btn full big" onclick="checkAge()">다음</button>
+      <div class="muted center" style="margin-top:10px">🔒 태어난 해는 저장하지 않아요</div>
+    </div>
   </div>`;
+}
+/* 시작 화면 머리: 앱 아이콘 + 이름 + 한 줄 소개 (big이면 특징 세 가지도) */
+function welcomeHeadHtml(big){
+  return `<img class="wlogo ${big?'':'sm'}" src="icons/icon-192.png" alt="">
+    <div class="wname">용돈 받아라</div>
+    <div class="wtag">습관이 쌓이면 용돈이 쌓여요</div>
+    ${big?'<div class="wfeat"><span>✅ 습관 체크</span><span>💰 용돈 적립</span><span>🏦 저축·경제교육</span></div>':'<div style="height:20px"></div>'}`;
 }
 function checkAge(){
   const v=Number($('ageYear').value);
@@ -246,12 +255,12 @@ function renderSetup(){
       ${sync?`<button class="mtile" onclick="openJoinSetup()"><span class="mico">👨‍👩‍👧</span><span class="mlab">가족 코드로 옮기기</span><span class="msub">크롬 앱 「더보기 → 가족 연결」 코드</span></button>`:''}
       <button class="mtile" onclick="$('importFile').click()"><span class="mico">📂</span><span class="mlab">백업 파일로 옮기기</span><span class="msub">크롬 앱 「더보기 → 백업 저장」 파일</span></button>
     </div></div>`:'';
-  $('view').innerHTML=moveHtml+`<div class="card setupcard">
-    <div class="jua" style="font-size:21px">👋 자녀 이름을 알려 주세요</div>
+  $('view').innerHTML=`<div class="welcome">${welcomeHeadHtml(false)}</div>`+moveHtml+`<div class="wform setupcard">
+    <div class="wq">자녀 이름을 알려 주세요</div>
     <div id="setupKids"><div class="kidrow"><input class="skid" placeholder="예: 첫째 (별명도 좋아요)"></div></div>
-    <button class="btn sm ghost" style="margin-top:8px" onclick="addSetupKid()">+ 자녀 더 추가</button>
+    <button class="btn sm ghost" style="margin-top:10px" onclick="addSetupKid()">+ 자녀 더 추가</button>
     <button class="btn full big" id="setupBtn" onclick="doSetup()">시작하기</button>
-    <div class="muted center" style="margin-top:8px">🔒 회원가입 없이 이 휴대폰에 저장돼요</div>
+    <div class="muted center" style="margin-top:10px">🔒 회원가입 없이 이 휴대폰에 저장돼요</div>
   </div>
   <div class="lhead">다른 방법으로 시작하기</div>
   <div class="list">
