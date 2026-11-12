@@ -257,6 +257,87 @@
   .kidrow input{flex:1}
   .center{text-align:center}
   a{color:var(--blue)}
+
+  /* ===== 가볍게 다듬기 (2026-11-12) — 기능·내용은 그대로, 색 칸과 테두리를 줄이고 여백을 늘림 ===== */
+  :root{--bg:#F6F5F2;--line:#ECE8E1;--soft:#F4F1EC;--ink:#2B2622;--sub:#8C857E;
+    --shadow:0 1px 2px rgba(40,30,20,.04),0 6px 18px rgba(40,30,20,.04)}
+  body{line-height:1.5;letter-spacing:-.01em}
+  .wrap{padding-left:18px;padding-right:18px}
+  /* 제목은 기본 글꼴 굵게, 둥근 글꼴(Jua)은 앱 이름과 금액 숫자에만 */
+  .jua,.sec,.sheet h3,.datenav .d,details.fold summary,.weekhead{font-family:inherit;font-weight:800;letter-spacing:-.02em}
+  h1{font-family:'Jua',sans-serif;font-weight:400}
+  body:has(#tabs:not(.hide)) h1{font-size:16px;color:var(--sub);margin:0 0 12px}
+  .sec{font-size:15px;margin:24px 4px 10px}
+  .sec .muted{font-weight:400;font-size:12px}
+  .sheet h3{font-size:19px;margin-bottom:10px}
+  .datenav{margin:2px 0 14px}
+  .datenav .d{font-size:17px;min-width:140px}
+  .nav{width:34px;height:34px;font-size:12px;background:none;box-shadow:none;border:1px solid var(--line);color:var(--sub)}
+  /* 카드: 아래 줄 대신 옅은 그림자 */
+  .card,.list,details.fold,.mtile{box-shadow:var(--shadow);border-radius:20px}
+  .card{padding:18px;margin-bottom:14px}
+  details.fold{margin-bottom:14px}
+  details.fold summary{font-size:15px;padding:16px 18px}
+  details.fold summary::after{font-weight:400}
+  details.fold .fbody{padding:0 18px 16px}
+  .kid{border:1px solid var(--line);padding:7px 14px;font-size:15px}
+  .kid.on{background:#FFF1DC;border-color:#FFD9A8;color:var(--main-d)}
+  .bal{font-size:38px}
+  .bal-label{font-size:13px}
+  .bar{height:8px}
+  /* 세 통장: 색 칸 3개 → 한 줄 묶음 */
+  .jars{gap:0;background:var(--soft);border-radius:14px;padding:4px 0;margin-top:14px}
+  .jar,.jar.spend,.jar.save,.jar.give{background:none;border-radius:0;padding:8px 4px}
+  .jar+.jar{border-left:1px solid var(--line)}
+  .jar b{font-size:16px}
+  /* 버튼 줄: 진한 색 → 옅은 색 바탕 */
+  .actrow{margin-top:14px}
+  .act{background:var(--soft);background:color-mix(in srgb,var(--c) 11%,#fff);color:var(--ink);font-weight:600;font-size:12.5px;padding:12px 4px}
+  .act b{font-size:19px}
+  .bankline{background:none;border-radius:0;border-top:1px solid var(--line);padding:14px 0 0;margin-top:14px;color:var(--ink)}
+  .bankline b{color:var(--blue)}
+  .mini{gap:0 12px;margin-top:14px;border-top:1px solid var(--line)}
+  .mini div{background:none;border-radius:0;padding:12px 2px 0}
+  .mini b{font-size:17px}
+  /* 실천 항목 */
+  .item{border:1px solid transparent;border-radius:18px;padding:14px 16px;margin-bottom:10px;box-shadow:var(--shadow)}
+  .item.some{border-color:#CDEFDD}
+  .item.full{border-color:#A6DFC1;background:#F7FCF9}
+  .item.fine{background:#fff}
+  .item.fine.some,.item.fine.full{border-color:#F3C4C8;background:#FFF8F8}
+  .item .n{font-size:15px}
+  .box{width:42px;height:42px;border-radius:50%;border:1.5px solid #DDD6CC;font-size:18px}
+  .amt{font-size:17px}
+  /* 아래 탭: 고른 탭만 색 */
+  .tabs{border-top:0;box-shadow:0 -1px 0 var(--line),0 -8px 24px rgba(40,30,20,.04)}
+  .tab{font-size:11.5px;padding:8px 0 10px}
+  .tab b{font-size:20px;filter:grayscale(1);opacity:.5}
+  .tab.on b{filter:none;opacity:1}
+  .btn{border-radius:14px}
+  .btn.sm{border-radius:10px;padding:7px 12px}
+  input,select,textarea{border:1.5px solid var(--line);border-radius:12px;padding:11px 12px}
+  input:focus,select:focus,textarea:focus{outline:0;border-color:var(--main)}
+  .seg button{border-width:1.5px;border-radius:12px}
+  .badge{color:var(--sub)}
+  .line{border-bottom:1px solid var(--line);padding:12px 2px}
+  .weekhead{font-size:13px;color:var(--sub)}
+  .mitem{padding:12px 0}
+  .list .lrow{padding:15px 18px}
+  .tip,.warn{border-radius:14px;padding:12px 14px}
+  .modal{background:rgba(30,24,18,.35)}
+  .sheet{border-radius:24px 24px 0 0;padding:22px 18px calc(24px + env(safe-area-inset-bottom))}
+  .moregrid{gap:12px}
+  .mtile{min-height:98px}
+  .mico{font-size:26px}
+  .mlab{font-size:13px;font-weight:600}
+  .demobar.big{border:0;padding:10px 12px 10px 14px}
+  .demobar.big .dico{font-size:22px}
+  .demobar.big .dtxt b{font-size:15px}
+  .demobar.big .dtxt span{font-size:13px}
+  .demobar.big .btn{font-size:13px;padding:8px 12px;border-radius:12px}
+  .pendbar{border-radius:16px}
+  .bcard{border:0;background:#FFF8E6}
+  .kidhead{background:#fff}
 </style>
 </head>
 <body>

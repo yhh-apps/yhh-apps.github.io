@@ -1,6 +1,6 @@
 /* 오프라인용 서비스 워커 — 앱 파일을 기기에 저장해 두고 인터넷 없이도 열리게 함.
    앱 파일을 고친 뒤 배포할 때는 CACHE 버전 숫자를 올려 주세요. */
-const CACHE = 'allowance-v39';
+const CACHE = 'allowance-v40';
 const FILES = [
   './', './index.html', './app.js', './plus.js', './kid.js', './account.js', './native.js', './plus-config.js', './store.js', './sync.js', './firebase-config.js', './privacy.html', './manifest.webmanifest',
   './fonts/Jua-Regular.ttf', './icons/icon-192.png', './icons/icon-512.png',
